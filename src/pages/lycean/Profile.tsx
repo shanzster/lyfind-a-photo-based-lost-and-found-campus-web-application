@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, LogOut, Mail, Phone } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 export default function ProfilePage() {
   return (

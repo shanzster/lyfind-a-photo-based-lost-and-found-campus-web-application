@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { ArrowLeft, MapPin, Clock, Eye, Share2, Flag, Calendar, MessageCircle, X, CheckCircle } from 'lucide-react'
 import LyceanSidebar from '@/components/lycean-sidebar'
 
@@ -45,7 +45,6 @@ const mockItem = {
 }
 
 export default function ItemPage() {
-  const { id } = useParams()
   const [selectedImage, setSelectedImage] = useState(0)
   const [showMessageModal, setShowMessageModal] = useState(false)
   const [message, setMessage] = useState('')

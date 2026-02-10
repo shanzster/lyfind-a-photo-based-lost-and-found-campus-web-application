@@ -1,10 +1,8 @@
 import { Link } from 'react-router-dom'
-import { useAuth } from '@/hooks/use-auth'
 import { useState } from 'react'
 import { Home, Info, Briefcase, Code, School, LogIn, UserPlus } from 'lucide-react'
 
 export default function Header() {
-  const { isLoggedIn } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const menuItems = [

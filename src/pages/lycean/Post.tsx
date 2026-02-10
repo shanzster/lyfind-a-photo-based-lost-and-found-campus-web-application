@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Upload, X, MapPin, Calendar, Tag, FileText, Image as ImageIcon, AlertCircle, CheckCircle2, Navigation, Crosshair } from 'lucide-react'
+import { Upload, X, MapPin, Calendar, Tag, FileText, Image as ImageIcon, AlertCircle, CheckCircle2, Crosshair } from 'lucide-react'
 import LyceanSidebar from '@/components/lycean-sidebar'
 
 const categories = ['Bags', 'Electronics', 'Jewelry', 'Accessories', 'Keys', 'Clothing', 'Books', 'Other']

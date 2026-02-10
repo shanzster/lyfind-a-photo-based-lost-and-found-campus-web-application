@@ -3,7 +3,6 @@ import { Upload, Search, Bell, CheckCircle, Clock } from 'lucide-react'
 
 export default function PostingAlgorithmDemo() {
   const [activeStep, setActiveStep] = useState(0)
-  const [isAnimating, setIsAnimating] = useState(false)
 
   const steps = [
     {
@@ -38,12 +37,10 @@ export default function PostingAlgorithmDemo() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setIsAnimating(true)
       setActiveStep((prev) => {
         const next = (prev + 1) % steps.length
         return next
       })
-      setTimeout(() => setIsAnimating(false), 500)
     }, 3000)
 
     return () => clearInterval(interval)

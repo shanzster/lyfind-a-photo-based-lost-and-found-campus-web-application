@@ -1,4 +1,4 @@
-import { Camera, Search, MessageSquare, Bell, Map, Shield, Zap, Users, CheckCircle, Clock, Award, Lock } from 'lucide-react'
+import { Camera, Search } from 'lucide-react'
 import AIMatchingDemo from '@/components/ai-matching-demo'
 import CampusMapDemo from '@/components/campus-map-demo'
 import PostingAlgorithmDemo from '@/components/posting-algorithm-demo'

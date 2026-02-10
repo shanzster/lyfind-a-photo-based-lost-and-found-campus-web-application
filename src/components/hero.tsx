@@ -1,5 +1,3 @@
-import { Link } from 'react-router-dom'
-import { Search, MessageSquare, Shield } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 export default function Hero() {

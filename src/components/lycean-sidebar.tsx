@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Search, PlusCircle, MessageCircle, User, LogOut, Menu, X } from 'lucide-react'
+import { Search, PlusCircle, MessageCircle, User, LogOut, X } from 'lucide-react'
 
 const navigation = [
   { name: 'Browse', href: '/browse', icon: Search },
