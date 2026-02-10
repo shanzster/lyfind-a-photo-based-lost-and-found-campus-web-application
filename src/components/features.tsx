@@ -1,75 +1,68 @@
-'use client'
-
-import { Camera, Zap, MessageSquare, Bell, Search, Lock } from 'lucide-react'
-
-const features = [
-  {
-    icon: Camera,
-    title: 'Photo Upload',
-    description: 'Snap and upload photos of items instantly with our intuitive mobile-first interface.',
-  },
-  {
-    icon: Zap,
-    title: 'Smart Matching',
-    description: 'AI-powered algorithm matches items based on photos, descriptions, and location data.',
-  },
-  {
-    icon: MessageSquare,
-    title: 'Direct Messaging',
-    description: 'Connect with other students safely through our built-in messaging system.',
-  },
-  {
-    icon: Bell,
-    title: 'Real-Time Notifications',
-    description: 'Get instant alerts when potential matches are found for your items.',
-  },
-  {
-    icon: Search,
-    title: 'Advanced Search',
-    description: 'Filter by category, date, location, and item type to find what you need faster.',
-  },
-  {
-    icon: Lock,
-    title: 'Secure & Private',
-    description: 'All data is encrypted. Your identity and information are completely protected.',
-  },
-]
+import { Camera, Zap, MessageSquare, Shield, Bell, Lock } from 'lucide-react'
 
 export default function Features() {
+  const features = [
+    {
+      icon: Camera,
+      title: 'Photo Matching',
+      description: 'Advanced AI recognizes items from photos instantly.',
+    },
+    {
+      icon: Zap,
+      title: 'Real-Time Alerts',
+      description: 'Get notified the moment a match is found.',
+    },
+    {
+      icon: MessageSquare,
+      title: 'Direct Chat',
+      description: 'Message other students securely in-app.',
+    },
+    {
+      icon: Shield,
+      title: 'Campus Verified',
+      description: 'Only verified students can access the platform.',
+    },
+    {
+      icon: Bell,
+      title: 'Smart Notifications',
+      description: 'Never miss a potential match with push alerts.',
+    },
+    {
+      icon: Lock,
+      title: 'Privacy First',
+      description: 'Your data is encrypted and secure.',
+    },
+  ]
+
   return (
-    <section className="py-20 sm:py-32 border-t border-border">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Section header */}
-        <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
-            Powerful Features
+    <section className="py-32 px-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="text-center mb-20">
+          <h2 className="text-5xl sm:text-6xl font-normal text-white mb-6">
+            Everything You Need
           </h2>
-          <p className="text-lg text-foreground/60 max-w-2xl mx-auto">
-            Everything you need to reunite lost items with their owners
+          <p className="text-xl text-white/50 max-w-2xl mx-auto">
+            Powerful features designed for the modern campus
           </p>
         </div>
 
-        {/* Features grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {features.map((feature, index) => {
-            const Icon = feature.icon
-            return (
-              <div
-                key={index}
-                className="rounded-lg border border-border bg-card p-8"
-              >
-                <div className="mb-4 flex items-center gap-3">
-                  <Icon className="h-6 w-6 text-secondary" />
-                  <h3 className="text-lg font-semibold text-foreground">
-                    {feature.title}
-                  </h3>
-                </div>
-                <p className="text-foreground/60 text-sm leading-relaxed">
-                  {feature.description}
-                </p>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {features.map((feature, idx) => (
+            <div
+              key={idx}
+              className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all group"
+            >
+              <div className="w-14 h-14 bg-[#ff7400]/20 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                <feature.icon className="w-7 h-7 text-[#ff7400]" />
               </div>
-            )
-          })}
+              <h3 className="text-2xl font-normal text-white mb-3">
+                {feature.title}
+              </h3>
+              <p className="text-white/60 leading-relaxed">
+                {feature.description}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
     </section>

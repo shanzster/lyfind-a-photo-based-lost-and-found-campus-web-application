@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { LostFoundItem, mockItems } from '@/src/lib/mock-data'
+import { LostFoundItem, mockItems } from '@/lib/mock-data'
 
 export function useItems() {
   const [items, setItems] = useState<LostFoundItem[]>([])

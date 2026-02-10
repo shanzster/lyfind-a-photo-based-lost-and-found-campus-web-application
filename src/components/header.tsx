@@ -1,106 +1,156 @@
-'use client'
-
-import Link from 'next/link'
-import { Button } from '@/src/components/ui/button'
-import { Search, Bell, MessageSquare, User } from 'lucide-react'
-import { useAuth } from '@/src/hooks/use-auth'
+import { Link } from 'react-router-dom'
+import { useAuth } from '@/hooks/use-auth'
+import { useState } from 'react'
+import { Home, Info, Briefcase, Code, School, LogIn, UserPlus } from 'lucide-react'
 
 export default function Header() {
-  const { isLoggedIn, user } = useAuth()
+  const { isLoggedIn } = useAuth()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const menuItems = [
+    { icon: Home, label: 'Home', to: '/' },
+    { icon: Info, label: 'About', to: '/about' },
+    { icon: Briefcase, label: 'Services', to: '/services' },
+    { icon: Code, label: 'Developer', to: '/developer' },
+    { icon: School, label: 'Institution', to: '/institution' },
+    { icon: LogIn, label: 'Login', to: '/login' },
+    { icon: UserPlus, label: 'Register', to: '/register' }
+  ]
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between gap-8">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-              <span className="text-lg font-bold text-primary-foreground">L</span>
-            </div>
-            <span className="hidden text-xl font-bold text-foreground sm:inline">
-              LyFind
-            </span>
-          </Link>
-
-          {/* Navigation Links */}
-          <nav className="hidden items-center gap-6 md:flex">
-            <Link
-              href="/browse"
-              className="text-sm font-medium text-foreground/70 transition-colors hover:text-foreground"
+    <>
+      {/* Desktop Navigation */}
+      <header className="hidden lg:flex fixed top-6 left-0 right-0 z-50 justify-center px-6">
+        {/* Centered Pill Navigation */}
+        <nav className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-full px-2 py-2 shadow-2xl shadow-black/20">
+          <div className="flex items-center gap-1">
+            {/* Logo */}
+            <Link 
+              to="/" 
+              className="flex items-center gap-2 px-4 py-2 hover:bg-white/10 rounded-full transition-all"
             >
-              Browse Items
+              <img 
+                src="/Untitled design (3).png" 
+                alt="LyFind" 
+                className="w-6 h-6 object-contain"
+              />
+              <span className="text-white font-medium text-sm hidden sm:inline">LyFind</span>
             </Link>
-            <Link
-              href="/about"
-              className="text-sm font-medium text-foreground/70 transition-colors hover:text-foreground"
+
+            {/* Divider */}
+            <div className="w-px h-6 bg-white/10 mx-1"></div>
+
+            {/* Nav Links */}
+            <Link 
+              to="/" 
+              className="px-4 py-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all text-sm font-normal"
+            >
+              Home
+            </Link>
+
+            <Link 
+              to="/about" 
+              className="px-4 py-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all text-sm font-normal"
             >
               About
             </Link>
-          </nav>
 
-          {/* Search Bar */}
-          <div className="hidden flex-1 max-w-xs lg:block">
-            <div className="relative">
-              <input
-                type="search"
-                placeholder="Search items..."
-                className="w-full rounded-lg bg-card px-3 py-2 pl-10 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary"
-              />
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            </div>
-          </div>
+            <Link 
+              to="/services" 
+              className="px-4 py-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all text-sm font-normal"
+            >
+              Services
+            </Link>
 
-          {/* User Actions */}
-          <div className="flex items-center gap-3">
-            {isLoggedIn ? (
-              <>
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="icon"
-                  className="text-foreground hover:bg-card"
-                >
-                  <Link href="/messages">
-                    <MessageSquare className="h-5 w-5" />
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="icon"
-                  className="text-foreground hover:bg-card"
-                >
-                  <Link href="/profile">
-                    <User className="h-5 w-5" />
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  className="bg-accent text-accent-foreground hover:bg-accent/90"
-                >
-                  <Link href="/post">Post Item</Link>
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="border-border bg-transparent text-foreground hover:bg-card"
-                >
-                  <Link href="/auth">Sign In</Link>
-                </Button>
-                <Button
-                  asChild
-                  className="hidden bg-accent text-accent-foreground hover:bg-accent/90 sm:inline-flex"
-                >
-                  <Link href="/post">Post Item</Link>
-                </Button>
-              </>
-            )}
+            <Link 
+              to="/developer" 
+              className="px-4 py-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all text-sm font-normal"
+            >
+              Developer
+            </Link>
+
+            <Link 
+              to="/institution" 
+              className="px-4 py-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all text-sm font-normal hidden xl:inline-block"
+            >
+              Institution
+            </Link>
+
+            {/* Divider */}
+            <div className="w-px h-6 bg-white/10 mx-1"></div>
+
+            {/* Auth Buttons */}
+            <Link 
+              to="/login" 
+              className="px-5 py-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all text-sm font-normal"
+            >
+              Login
+            </Link>
+            
+            <Link 
+              to="/register" 
+              className="px-5 py-2 bg-[#ff7400] hover:bg-[#ff8500] text-white rounded-full transition-all text-sm font-medium shadow-lg shadow-[#ff7400]/20"
+            >
+              Register
+            </Link>
           </div>
-        </div>
+        </nav>
+      </header>
+
+      {/* Mobile FAB and Menu */}
+      <div className="lg:hidden fixed bottom-6 right-6 z-50">
+        {/* Backdrop */}
+        {mobileMenuOpen && (
+          <div 
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm -z-10"
+            onClick={() => setMobileMenuOpen(false)}
+          ></div>
+        )}
+
+        {/* Menu Items - Circular Icons */}
+        {mobileMenuOpen && (
+          <div className="absolute bottom-20 right-0 flex flex-col items-end gap-4">
+            {menuItems.map((item, index) => {
+              const Icon = item.icon
+              const isRegister = item.label === 'Register'
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 group animate-[slideIn_0.3s_ease-out]"
+                  style={{ animationDelay: `${index * 0.05}s` }}
+                >
+                  <span className="text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full whitespace-nowrap">
+                    {item.label}
+                  </span>
+                  <div className={`w-14 h-14 flex-shrink-0 rounded-full backdrop-blur-xl border shadow-lg flex items-center justify-center transition-all hover:scale-110 ${
+                    isRegister 
+                      ? 'bg-[#ff7400] border-[#ff7400]/50 shadow-[#ff7400]/30' 
+                      : 'bg-white/10 border-white/20 shadow-black/20'
+                  }`}>
+                    <Icon className={`w-6 h-6 ${isRegister ? 'text-white' : 'text-white/90'}`} />
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+
+        {/* FAB Button - Glass Background */}
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className={`w-16 h-16 backdrop-blur-xl bg-white/10 border border-white/20 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 ${
+            mobileMenuOpen ? 'rotate-45' : ''
+          }`}
+        >
+          <img 
+            src="/Untitled design (3).png" 
+            alt="LyFind" 
+            className="w-10 h-10 object-contain"
+          />
+        </button>
       </div>
-    </header>
+    </>
   )
 }
