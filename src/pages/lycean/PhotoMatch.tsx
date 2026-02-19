@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Upload, Image as ImageIcon, Loader2, CheckCircle, XCircle, Clock, Sparkles, TrendingUp } from 'lucide-react';
+import { Upload, Image as ImageIcon, Loader2, CheckCircle, XCircle, Clock, TrendingUp } from 'lucide-react';
 import LyceanSidebar from '@/components/lycean-sidebar';
 
 interface QueueItem {
@@ -112,7 +112,7 @@ export default function PhotoMatchPage() {
       ];
 
       let currentDelay = 0;
-      steps.forEach((stepData, index) => {
+      steps.forEach((stepData) => {
         currentDelay += stepData.delay;
         setTimeout(() => {
           setQueue(prev => prev.map(item => 
