@@ -240,7 +240,7 @@ export default function Hero() {
           
           {/* Disclaimer */}
           <p className="text-xs text-white/40 text-center leading-relaxed">
-            Progressive Web App. Works offline. No app store required.
+            Progressive Web App. No app store required.
             <br />
             <span className="text-white/30">Requires modern browser with PWA support.</span>
           </p>

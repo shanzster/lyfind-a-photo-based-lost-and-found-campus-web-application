@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Search, PlusCircle, MessageCircle, User, LogOut, X } from 'lucide-react'
+import { Search, PlusCircle, MessageCircle, User, LogOut, X, ScanSearch } from 'lucide-react'
 
 const navigation = [
   { name: 'Browse', href: '/browse', icon: Search },
   { name: 'Post Item', href: '/post', icon: PlusCircle },
+  { name: 'LyFind Assistant', href: '/photo-match', icon: ScanSearch },
   { name: 'Messages', href: '/messages', icon: MessageCircle },
   { name: 'Profile', href: '/profile', icon: User },
 ]

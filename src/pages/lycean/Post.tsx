@@ -107,7 +107,7 @@ export default function PostPage() {
     <>
       <LyceanSidebar />
       <main className="min-h-screen pt-6 lg:pt-12 pb-24 lg:pb-12 px-4 lg:px-6 lg:pl-80 lg:pr-12">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-8 lg:mb-12">
             <h1 className="text-3xl lg:text-5xl font-medium text-white mb-3 lg:mb-4">Post an Item</h1>

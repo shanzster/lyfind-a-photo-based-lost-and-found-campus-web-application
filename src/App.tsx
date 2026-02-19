@@ -19,6 +19,7 @@ import ItemPage from '@/pages/lycean/Item';
 import PostPage from '@/pages/lycean/Post';
 import ProfilePage from '@/pages/lycean/Profile';
 import MessagesPage from '@/pages/lycean/Messages';
+import PhotoMatchPage from '@/pages/lycean/PhotoMatch';
 
 // Faculty pages
 import FacultyLoginPage from '@/pages/faculty/FacultyLogin';
@@ -34,7 +35,8 @@ export default function App() {
                        location.pathname.startsWith('/item') || 
                        location.pathname.startsWith('/post') || 
                        location.pathname.startsWith('/profile') || 
-                       location.pathname.startsWith('/messages');
+                       location.pathname.startsWith('/messages') ||
+                       location.pathname.startsWith('/photo-match');
   
   const isFacultyPage = location.pathname.startsWith('/faculty');
   const isAdminPage = location.pathname.startsWith('/admin');
@@ -54,6 +56,7 @@ export default function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/post" element={<PostPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/photo-match" element={<PhotoMatchPage />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/services" element={<ServicesPage />} />
