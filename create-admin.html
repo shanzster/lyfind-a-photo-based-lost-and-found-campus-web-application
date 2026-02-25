@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Admin Account - LyFind</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #2f1632 0%, #1a1a2e 50%, #0f0f1e 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #ff7400, #ff5500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #ff7400;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #ff7400, #ff5500);
+            border: none;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(255, 116, 0, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .output {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            display: none;
+        }
+
+        .output.show {
+            display: block;
+        }
+
+        .output h3 {
+            color: #4ade80;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .output pre {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #e5e7eb;
+        }
+
+        .copy-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert-info {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+        }
+
+        .alert-warning {
+            background: rgba(251, 191, 36, 0.1);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            color: #fcd34d;
+        }
+
+        .steps {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 116, 0, 0.05);
+            border: 1px solid rgba(255, 116, 0, 0.2);
+            border-radius: 12px;
+        }
+
+        .steps h3 {
+            color: #ff7400;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .steps ol {
+            margin-left: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            line-height: 1.8;
+        }
+
+        .steps li {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ Create Admin Account</h1>
+        <p class="subtitle">Generate Firestore document data for your admin account</p>
+
+        <div class="alert alert-warning">
+            ⚠️ You must first create a user account in Firebase Auth before using this tool.
+        </div>
+
+        <form id="adminForm">
+            <div class="form-group">
+                <label for="uid">Firebase Auth UID *</label>
+                <input 
+                    type="text" 
+                    id="uid" 
+                    placeholder="Paste your Firebase Auth UID here"
+                    required
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email *</label>
+                <input 
+                    type="email" 
+                    id="email" 
+                    placeholder="admin@lsb.edu.ph"
+                    value="admin@lsb.edu.ph"
+                    required
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="displayName">Display Name *</label>
+                <input 
+                    type="text" 
+                    id="displayName" 
+                    placeholder="Admin User"
+                    value="Admin User"
+                    required
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="role">Admin Role *</label>
+                <select id="role" required>
+                    <option value="super_admin">Super Admin (Full Access)</option>
+                    <option value="moderator">Moderator (Content Moderation)</option>
+                    <option value="support">Support Staff (User Support)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="adminLevel">Admin Level *</label>
+                <select id="adminLevel" required>
+                    <option value="super">Super</option>
+                    <option value="standard">Standard</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn">Generate Admin Data</button>
+        </form>
+
+        <div id="output" class="output">
+            <h3>✅ Admin Data Generated!</h3>
+            <p style="color: rgba(255, 255, 255, 0.7); margin-bottom: 15px; font-size: 14px;">
+                Copy this JSON and paste it into Firestore:
+            </p>
+            <pre id="jsonOutput"></pre>
+            <button class="copy-btn" onclick="copyToClipboard()">📋 Copy to Clipboard</button>
+        </div>
+
+        <div class="steps">
+            <h3>📝 Next Steps:</h3>
+            <ol>
+                <li>Create a user account at <code>/register</code> if you haven't already</li>
+                <li>Get your Firebase Auth UID from Firebase Console > Authentication</li>
+                <li>Paste your UID above and fill in the details</li>
+                <li>Click "Generate Admin Data"</li>
+                <li>Go to Firebase Console > Firestore Database</li>
+                <li>Create collection: <code>admins</code></li>
+                <li>Add document with your UID as Document ID</li>
+                <li>Paste the generated JSON (add timestamps manually)</li>
+                <li>Login at <code>/admin/login</code></li>
+            </ol>
+        </div>
+    </div>
+
+    <script type="module">
+        const PERMISSIONS = {
+            super_admin: [
+                'users.view', 'users.edit', 'users.delete', 'users.suspend', 'users.ban',
+                'items.view', 'items.edit', 'items.delete', 'items.feature',
+                'items.approve', 'items.reject', 'items.request_info',
+                'reports.view', 'reports.handle', 'reports.delete',
+                'messages.view', 'messages.delete',
+                'ai.configure', 'ai.monitor',
+                'analytics.view', 'analytics.export',
+                'settings.view', 'settings.edit',
+                'admins.create', 'admins.edit', 'admins.delete',
+                'logs.view', 'logs.export',
+                'system.backup', 'system.restore', 'system.shutdown'
+            ],
+            moderator: [
+                'users.view', 'users.suspend', 'users.ban',
+                'items.view', 'items.edit', 'items.delete',
+                'items.approve', 'items.reject', 'items.request_info',
+                'reports.view', 'reports.handle',
+                'messages.view', 'messages.delete',
+                'analytics.view'
+            ],
+            support: [
+                'users.view',
+                'items.view',
+                'items.approve', 'items.request_info',
+                'reports.view',
+                'messages.view',
+                'analytics.view'
+            ]
+        };
+
+        document.getElementById('adminForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const uid = document.getElementById('uid').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const displayName = document.getElementById('displayName').value.trim();
+            const role = document.getElementById('role').value;
+            const adminLevel = document.getElementById('adminLevel').value;
+
+            if (!uid) {
+                alert('Please enter your Firebase Auth UID');
+                return;
+            }
+
+            const adminData = {
+                email: email,
+                displayName: displayName,
+                role: role,
+                adminLevel: adminLevel,
+                permissions: PERMISSIONS[role],
+                twoFactorEnabled: false,
+                assignedBy: 'system',
+                active: true,
+                _note: 'Add createdAt and lastLogin as Timestamp fields in Firestore (use "Set to current time")'
+            };
+
+            const jsonOutput = JSON.stringify(adminData, null, 2);
+            document.getElementById('jsonOutput').textContent = jsonOutput;
+            document.getElementById('output').classList.add('show');
+
+            // Scroll to output
+            document.getElementById('output').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+
+        window.copyToClipboard = function() {
+            const text = document.getElementById('jsonOutput').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            });
+        };
+    </script>
+</body>
+</html>

@@ -40,34 +40,46 @@ export default function Hero() {
 
       {/* Animated Notifications */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {notifications.map((notification) => (
-          <div
-            key={notification.id}
-            className="absolute animate-notification"
-            style={{
-              left: `${Math.random() * 80 + 10}%`,
-              top: `${Math.random() * 60 + 20}%`,
-            }}
-          >
-            <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl p-4 shadow-2xl min-w-[200px]">
-              <div className="flex items-center gap-3">
-                <img 
-                  src={notification.emoji} 
-                  alt={notification.item}
-                  className="w-12 h-12 object-contain"
-                />
-                <div>
-                  <p className="text-white font-medium text-sm">{notification.item}</p>
-                  <p className={`text-xs font-medium ${
-                    notification.status === 'Found' ? 'text-green-400' : 'text-orange-400'
-                  }`}>
-                    {notification.status}
-                  </p>
+        {notifications.map((notification) => {
+          // Generate position that avoids the center area (where text is)
+          const isLeft = Math.random() > 0.5
+          const isTop = Math.random() > 0.5
+          
+          // Position notifications in corners/edges only
+          const left = isLeft 
+            ? `${Math.random() * 15 + 2}%`  // Left edge: 2-17%
+            : `${Math.random() * 15 + 83}%` // Right edge: 83-98%
+          
+          const top = isTop
+            ? `${Math.random() * 20 + 5}%`  // Top area: 5-25%
+            : `${Math.random() * 20 + 75}%` // Bottom area: 75-95%
+          
+          return (
+            <div
+              key={notification.id}
+              className="absolute animate-notification"
+              style={{ left, top }}
+            >
+              <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl p-4 shadow-2xl min-w-[200px]">
+                <div className="flex items-center gap-3">
+                  <img 
+                    src={notification.emoji} 
+                    alt={notification.item}
+                    className="w-12 h-12 object-contain"
+                  />
+                  <div>
+                    <p className="text-white font-medium text-sm">{notification.item}</p>
+                    <p className={`text-xs font-medium ${
+                      notification.status === 'Found' ? 'text-green-400' : 'text-orange-400'
+                    }`}>
+                      {notification.status}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <style>{`

@@ -6,12 +6,12 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Header from '@/src/components/header'
 import { Button } from '@/src/components/ui/button'
-import { Upload, ArrowLeft, ImagePlus, Loader2 } from 'lucide-react'
+import { ArrowLeft, ImagePlus, Loader2 } from 'lucide-react'
 import { useAuth } from '@/src/hooks/use-auth'
 import { useItems } from '@/src/hooks/use-items'
+import { LocationPickerWithOCR } from '@/src/components/LocationPickerWithOCR'
 
 const categories = ['electronics', 'accessories', 'documents', 'clothing', 'other']
-const locations = ['Library', 'Cafeteria', 'Gym', 'Parking Lot', 'Auditorium', 'Computer Lab', 'Hallway', 'Other']
 
 export default function PostPage() {
   const { user, isLoggedIn } = useAuth()
@@ -21,11 +21,16 @@ export default function PostPage() {
     itemType: 'lost' as 'lost' | 'found',
     title: '',
     category: 'electronics' as any,
-    location: '',
     date: '',
     description: '',
     reward: '',
   })
+  const [location, setLocation] = useState<{
+    floorPlanId: string;
+    x: number;
+    y: number;
+    roomNumber?: string;
+  } | null>(null)
   const [images, setImages] = useState<File[]>([])
   const [preview, setPreview] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -61,6 +66,11 @@ export default function PostPage() {
       return
     }
 
+    if (!location) {
+      alert('Please select a location on the floor plan')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -74,7 +84,10 @@ export default function PostPage() {
         type: formData.itemType,
         status: 'active',
         image: itemImage,
-        location: formData.location,
+        floorPlanId: location.floorPlanId,
+        locationX: location.x,
+        locationY: location.y,
+        roomNumber: location.roomNumber,
         date: formData.date,
         postedBy: user?.name || 'Anonymous',
         contact: user?.email || '',
@@ -225,39 +238,29 @@ export default function PostPage() {
               </div>
 
               <div>
-                <label htmlFor="location" className="block text-sm font-semibold text-foreground mb-2">
-                  Location *
+                <label htmlFor="date" className="block text-sm font-semibold text-foreground mb-2">
+                  Date *
                 </label>
-                <select
-                  id="location"
-                  name="location"
-                  value={formData.location}
+                <input
+                  id="date"
+                  type="date"
+                  name="date"
+                  value={formData.date}
                   onChange={handleInputChange}
                   required
                   className="w-full rounded-lg bg-background px-4 py-2 text-foreground outline-none focus:ring-2 focus:ring-primary"
-                >
-                  <option value="">Select a location</option>
-                  {locations.map((loc) => (
-                    <option key={loc} value={loc}>
-                      {loc}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
 
-            <div>
-              <label htmlFor="date" className="block text-sm font-semibold text-foreground mb-2">
-                Date *
+            {/* Floor Plan Location Picker */}
+            <div className="rounded-xl border border-border bg-card p-6">
+              <label className="block text-sm font-semibold text-foreground mb-4">
+                Location on Floor Plan *
               </label>
-              <input
-                id="date"
-                type="date"
-                name="date"
-                value={formData.date}
-                onChange={handleInputChange}
-                required
-                className="w-full rounded-lg bg-background px-4 py-2 text-foreground outline-none focus:ring-2 focus:ring-primary"
+              <LocationPickerWithOCR
+                value={location || undefined}
+                onChange={setLocation}
               />
             </div>
 
@@ -353,7 +356,7 @@ export default function PostPage() {
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || !formData.title || !formData.category || !formData.date}
+              disabled={isSubmitting || !formData.title || !formData.category || !formData.date || !location}
               size="lg"
               className="flex-1 bg-accent hover:bg-accent/90 text-accent-foreground font-semibold disabled:opacity-50"
             >

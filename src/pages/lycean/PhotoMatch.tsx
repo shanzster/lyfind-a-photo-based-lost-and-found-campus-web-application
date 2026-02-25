@@ -1,57 +1,192 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Upload, Image as ImageIcon, Loader2, CheckCircle, XCircle, Clock, TrendingUp } from 'lucide-react';
+import { Upload, Image as ImageIcon, Loader2, CheckCircle, XCircle, Clock, TrendingUp, AlertCircle } from 'lucide-react';
 import LyceanSidebar from '@/components/lycean-sidebar';
-
-interface QueueItem {
-  id: string;
-  imageUrl: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
-  uploadedAt: Date;
-  results?: MatchResult[];
-  error?: string;
-  position?: number;
-  progress?: number;
-  currentStep?: string;
-  analysisDetails?: AnalysisDetails;
-}
-
-interface AnalysisDetails {
-  imageSize: string;
-  detectedObjects: string[];
-  dominantColors: string[];
-  features: number;
-  comparedItems: number;
-  processingTime: number;
-}
-
-interface MatchResult {
-  itemId: string;
-  title: string;
-  type: 'lost' | 'found';
-  score: number;
-  imageUrl: string;
-  location: string;
-  date: string;
-  postedBy: string;
-}
+import { photoMatchService, PhotoMatchRequest } from '@/services/photoMatchService';
+import { useAuth } from '@/contexts/AuthContext';
+import { onSnapshot, collection, query, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export default function PhotoMatchPage() {
-  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const { user } = useAuth();
+  const [queue, setQueue] = useState<PhotoMatchRequest[]>([]);
+  const [completedRequests, setCompletedRequests] = useState<PhotoMatchRequest[]>([]);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [remainingTime, setRemainingTime] = useState<string>('');
+  const [usageCount, setUsageCount] = useState(0);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Debug: Log user state
+  useEffect(() => {
+    console.log('[PhotoMatch] User state:', user ? { uid: user.uid, email: user.email } : 'Not logged in');
+  }, [user]);
+
+  // Check usage limit
+  useEffect(() => {
+    if (!user) return;
+
+    const checkUsageLimit = () => {
+      const today = new Date().toDateString();
+      const usageKey = `photoMatch_${user.uid}_${today}`;
+      const lastResetKey = `photoMatch_${user.uid}_lastReset`;
+      
+      const storedUsage = localStorage.getItem(usageKey);
+      const lastReset = localStorage.getItem(lastResetKey);
+      
+      // Check if we need to reset (12 hours have passed)
+      if (lastReset) {
+        const lastResetTime = new Date(lastReset).getTime();
+        const now = new Date().getTime();
+        const hoursPassed = (now - lastResetTime) / (1000 * 60 * 60);
+        
+        if (hoursPassed >= 12) {
+          // Reset usage
+          localStorage.removeItem(usageKey);
+          localStorage.removeItem(lastResetKey);
+          setUsageCount(0);
+          return;
+        }
+      }
+      
+      const count = parseInt(storedUsage || '0');
+      setUsageCount(count);
+    };
+
+    checkUsageLimit();
+    // Check every minute
+    const interval = setInterval(checkUsageLimit, 60000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  // Update remaining time for cooldown
+  useEffect(() => {
+    if (!user || usageCount < 2) return;
+
+    const updateRemainingTime = () => {
+      const lastResetKey = `photoMatch_${user.uid}_lastReset`;
+      const lastReset = localStorage.getItem(lastResetKey);
+      
+      if (!lastReset) return;
+      
+      const lastResetTime = new Date(lastReset).getTime();
+      const now = new Date().getTime();
+      const cooldownEnd = lastResetTime + (12 * 60 * 60 * 1000); // 12 hours
+      const remaining = cooldownEnd - now;
+      
+      if (remaining <= 0) {
+        setRemainingTime('');
+        return;
+      }
+      
+      const hours = Math.floor(remaining / (1000 * 60 * 60));
+      const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+      
+      setRemainingTime(`${hours}h ${minutes}m ${seconds}s`);
+    };
+
+    updateRemainingTime();
+    const interval = setInterval(updateRemainingTime, 1000);
+    return () => clearInterval(interval);
+  }, [user, usageCount]);
+
+  // Subscribe to real-time updates for ALL match requests (global queue)
+  useEffect(() => {
+    if (!user) return;
+
+    // Subscribe to all requests to show global queue
+    const q = query(
+      collection(db, 'photoMatches'),
+      where('status', 'in', ['queued', 'processing'])
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const requests = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      } as PhotoMatchRequest));
+      
+      // Sort client-side by createdAt ascending (oldest first)
+      requests.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis() || 0;
+        const bTime = b.createdAt?.toMillis() || 0;
+        return aTime - bTime;
+      });
+      
+      // Update positions
+      requests.forEach((req, index) => {
+        req.position = index + 1;
+      });
+      
+      setQueue(requests);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Subscribe to completed requests for the current user (temporary - will be deleted)
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, 'photoMatches'),
+      where('userId', '==', user.uid),
+      where('status', '==', 'completed')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added' || change.type === 'modified') {
+          const request = {
+            id: change.doc.id,
+            ...change.doc.data(),
+          } as PhotoMatchRequest;
+          
+          if (request.status === 'completed' && request.results) {
+            // Add to completed requests temporarily
+            setCompletedRequests(prev => {
+              // Check if already exists
+              const exists = prev.some(r => r.id === request.id);
+              if (exists) {
+                return prev.map(r => r.id === request.id ? request : r);
+              }
+              return [request, ...prev];
+            });
+            
+            // Delete from Firestore after 2 seconds (enough time to show results)
+            setTimeout(async () => {
+              try {
+                await photoMatchService.deleteMatchRequest(request.id);
+                console.log('[PhotoMatch] Deleted completed request:', request.id);
+              } catch (error) {
+                console.error('[PhotoMatch] Failed to delete request:', error);
+              }
+            }, 2000);
+          }
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
-        alert('File size must be less than 10MB');
+        setErrorMessage('File size must be less than 10MB');
+        setShowErrorModal(true);
         return;
       }
       
       if (!file.type.startsWith('image/')) {
-        alert('Please upload an image file');
+        setErrorMessage('Please upload an image file');
+        setShowErrorModal(true);
         return;
       }
 
@@ -62,143 +197,81 @@ export default function PhotoMatchPage() {
   };
 
   const handleUpload = async () => {
-    if (!selectedImage) return;
-
-    setIsUploading(true);
-
-    // Simulate getting image dimensions
-    const img = new Image();
-    img.src = previewUrl;
-    await new Promise(resolve => { img.onload = resolve; });
-    const imageSize = `${img.width}x${img.height}`;
-
-    const queueItem: QueueItem = {
-      id: Date.now().toString(),
-      imageUrl: previewUrl,
-      status: 'queued',
-      uploadedAt: new Date(),
-      position: queue.filter(q => q.status === 'queued' || q.status === 'processing').length + 1,
-      progress: 0,
-      currentStep: 'Waiting in queue...',
-    };
-
-    setQueue([queueItem, ...queue]);
-    setSelectedImage(null);
-    setPreviewUrl('');
-    setIsUploading(false);
-
-    // Simulate queue wait time
-    const queueDelay = queueItem.position! * 1000;
+    if (!selectedImage) {
+      setErrorMessage('Please select an image first');
+      setShowErrorModal(true);
+      return;
+    }
     
-    setTimeout(() => {
-      // Start processing
-      setQueue(prev => prev.map(item => 
-        item.id === queueItem.id 
-          ? { ...item, status: 'processing', position: undefined, progress: 5, currentStep: 'Uploading image...' }
-          : item
-      ));
+    if (!user) {
+      setErrorMessage('You must be logged in to use photo matching. Please log in first.');
+      setShowErrorModal(true);
+      return;
+    }
 
-      // Simulate realistic processing steps
-      const steps = [
-        { progress: 15, step: 'Preparing image...', delay: 800 },
-        { progress: 25, step: 'Loading visual analyzer...', delay: 600 },
-        { progress: 35, step: 'Extracting visual features...', delay: 1200 },
-        { progress: 50, step: 'Analyzing color patterns...', delay: 900 },
-        { progress: 60, step: 'Detecting objects and shapes...', delay: 1000 },
-        { progress: 70, step: 'Building visual signature...', delay: 800 },
-        { progress: 80, step: 'Comparing with 247 items...', delay: 1500 },
-        { progress: 90, step: 'Calculating similarity scores...', delay: 700 },
-        { progress: 95, step: 'Ranking results...', delay: 500 },
-      ];
+    // Check usage limit
+    if (usageCount >= 2) {
+      setShowLimitModal(true);
+      return;
+    }
 
-      let currentDelay = 0;
-      steps.forEach((stepData) => {
-        currentDelay += stepData.delay;
-        setTimeout(() => {
-          setQueue(prev => prev.map(item => 
-            item.id === queueItem.id 
-              ? { ...item, progress: stepData.progress, currentStep: stepData.step }
-              : item
-          ));
-        }, currentDelay);
-      });
-
-      // Complete processing
-      setTimeout(() => {
-        // Generate realistic analysis details
-        const detectedObjects = ['backpack', 'fabric', 'zipper', 'straps'];
-        const dominantColors = ['#2563eb', '#1e40af', '#1e3a8a'];
-        const features = 512;
-        const comparedItems = 247;
-        const processingTime = (currentDelay + 500) / 1000;
-
-        const mockResults: MatchResult[] = [
-          {
-            itemId: '1',
-            title: 'Blue Backpack',
-            type: 'found',
-            score: 95,
-            imageUrl: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=200&h=200&fit=crop',
-            location: 'Library - 2nd Floor',
-            date: '2024-02-15',
-            postedBy: 'Alex Student',
-          },
-          {
-            itemId: '2',
-            title: 'Navy Blue Backpack',
-            type: 'found',
-            score: 87,
-            imageUrl: 'https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?w=200&h=200&fit=crop',
-            location: 'Cafeteria',
-            date: '2024-02-14',
-            postedBy: 'Jordan Lee',
-          },
-          {
-            itemId: '3',
-            title: 'Dark Blue Backpack',
-            type: 'found',
-            score: 78,
-            imageUrl: 'https://images.unsplash.com/photo-1581605405669-fcdf81165afa?w=200&h=200&fit=crop',
-            location: 'Gym Locker Room',
-            date: '2024-02-13',
-            postedBy: 'Sam Chen',
-          },
-          {
-            itemId: '4',
-            title: 'Blue School Bag',
-            type: 'found',
-            score: 72,
-            imageUrl: 'https://images.unsplash.com/photo-1577733966973-d680bffd2e80?w=200&h=200&fit=crop',
-            location: 'Student Center',
-            date: '2024-02-12',
-            postedBy: 'Taylor Kim',
-          },
-        ];
-
-        setQueue(prev => prev.map(item => 
-          item.id === queueItem.id 
-            ? { 
-                ...item, 
-                status: 'completed', 
-                results: mockResults, 
-                progress: 100,
-                currentStep: 'Analysis complete!',
-                analysisDetails: {
-                  imageSize,
-                  detectedObjects,
-                  dominantColors,
-                  features,
-                  comparedItems,
-                  processingTime,
-                }
-              }
-            : item
-        ));
-      }, currentDelay + 500);
-    }, queueDelay);
+    // Show confirmation modal
+    setShowConfirmModal(true);
   };
 
-  const getStatusIcon = (status: QueueItem['status']) => {
+  const confirmUpload = async () => {
+    if (!selectedImage || !user) return;
+
+    setShowConfirmModal(false);
+    console.log('[PhotoMatch] Starting upload...', { user: user.uid, file: selectedImage.name });
+    setIsUploading(true);
+
+    try {
+      // Upload image to Firebase Storage
+      console.log('[PhotoMatch] Uploading image to Firebase Storage...');
+      const imageUrl = await photoMatchService.uploadImage(selectedImage, user.uid);
+      console.log('[PhotoMatch] Image uploaded:', imageUrl);
+      
+      // Create match request
+      console.log('[PhotoMatch] Creating match request...');
+      const requestId = await photoMatchService.createMatchRequest(user.uid, imageUrl);
+      console.log('[PhotoMatch] Match request created:', requestId);
+      
+      // Increment usage count
+      const today = new Date().toDateString();
+      const usageKey = `photoMatch_${user.uid}_${today}`;
+      const lastResetKey = `photoMatch_${user.uid}_lastReset`;
+      const newCount = usageCount + 1;
+      localStorage.setItem(usageKey, newCount.toString());
+      
+      // Set last reset time if this is the first use
+      if (usageCount === 0) {
+        localStorage.setItem(lastResetKey, new Date().toISOString());
+      }
+      
+      setUsageCount(newCount);
+      
+      // Start processing in background
+      console.log('[PhotoMatch] Starting background processing...');
+      photoMatchService.processMatchRequest(requestId).catch(error => {
+        console.error('[PhotoMatch] Background processing failed:', error);
+      });
+      
+      // Clear form
+      setSelectedImage(null);
+      setPreviewUrl('');
+      
+      console.log('[PhotoMatch] Upload complete');
+    } catch (error) {
+      console.error('[PhotoMatch] Upload failed:', error);
+      setErrorMessage(`Failed to upload image: ${error instanceof Error ? error.message : 'Unknown error'}. Check console for details.`);
+      setShowErrorModal(true);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const getStatusIcon = (status: PhotoMatchRequest['status']) => {
     switch (status) {
       case 'queued':
         return <Clock className="h-5 w-5 text-yellow-400" />;
@@ -219,7 +292,7 @@ export default function PhotoMatchPage() {
     }
   };
 
-  const getStatusText = (status: QueueItem['status'], position?: number) => {
+  const getStatusText = (status: PhotoMatchRequest['status'], position?: number) => {
     switch (status) {
       case 'queued':
         return `Queued - Position #${position}`;
@@ -234,24 +307,251 @@ export default function PhotoMatchPage() {
 
   const activeQueueCount = queue.filter(q => q.status === 'queued' || q.status === 'processing').length;
 
+  // Show login message if not authenticated
+  if (!user) {
+    return (
+      <>
+        <LyceanSidebar />
+        <main className="min-h-screen pt-6 lg:pt-12 pb-24 lg:pb-12 px-4 lg:px-6 lg:pl-80 lg:pr-12">
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-8 lg:mb-12">
+              <h1 className="text-3xl lg:text-5xl font-medium text-white mb-3 lg:mb-4">Photo Matcher</h1>
+              <p className="text-white/60 text-base lg:text-lg">Upload a photo to find similar items instantly</p>
+            </div>
+            <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-12 text-center">
+              <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="h-8 w-8 text-red-400" />
+              </div>
+              <h2 className="text-2xl font-semibold text-white mb-2">Authentication Required</h2>
+              <p className="text-white/60 mb-6">You must be logged in to use the photo matcher</p>
+              <Link to="/auth" className="inline-block px-6 py-3 rounded-xl bg-[#ff7400] hover:bg-[#ff7400]/90 text-white font-semibold transition-colors">
+                Go to Login
+              </Link>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // Show full-page limit overlay if daily limit is reached
+  if (usageCount >= 2) {
+    return (
+      <>
+        <LyceanSidebar />
+        <main className="min-h-screen pt-6 lg:pt-12 pb-24 lg:pb-12 px-4 lg:px-6 lg:pl-80 lg:pr-12 flex items-center justify-center">
+          <div className="max-w-md w-full">
+            <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-8 text-center">
+              {/* Spinning Logo */}
+              <div className="mb-6 flex justify-center">
+                <div className="w-24 h-24 animate-spin">
+                  <img 
+                    src="/Untitled design (3).png" 
+                    alt="LyFind Logo" 
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              </div>
+
+              {/* Title */}
+              <h2 className="text-2xl font-bold text-white mb-3">Daily Limit Reached</h2>
+              
+              {/* Message */}
+              <p className="text-white/70 mb-6">
+                Wait for 12 hours to use photo matching again
+              </p>
+
+              {/* Timer */}
+              {remainingTime && (
+                <div className="mb-6 p-8 rounded-2xl bg-[#ff7400]/10 border border-[#ff7400]/30">
+                  <div className="text-5xl font-bold text-[#ff7400] font-mono tracking-wider">
+                    {remainingTime}
+                  </div>
+                </div>
+              )}
+
+              {/* Info */}
+              <p className="text-sm text-white/50 mb-6">
+                You've used all 2 photo matches for today. The cooldown resets 12 hours after your first use.
+              </p>
+
+              {/* Back Button */}
+              <Link 
+                to="/browse"
+                className="w-full inline-block px-6 py-3 rounded-xl bg-[#ff7400] hover:bg-[#ff7400]/90 text-white font-semibold transition-colors"
+              >
+                Go to Browse
+              </Link>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
   return (
     <>
       <LyceanSidebar />
+      
+      {/* Daily Limit Reached - Full Page Overlay */}
+      {usageCount >= 2 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-lg">
+          <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-8 max-w-md w-full shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              {/* Spinning Logo */}
+              <div className="w-24 h-24 mb-6 animate-spin">
+                <img 
+                  src="/Untitled design (3).png" 
+                  alt="LyFind Logo" 
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              
+              {/* Title */}
+              <h2 className="text-2xl font-bold text-white mb-3">Daily Limit Reached</h2>
+              
+              {/* Message */}
+              <p className="text-white/70 mb-6 leading-relaxed">
+                You've used all 2 photo matches for today. Please wait for the cooldown period to reset.
+              </p>
+              
+              {/* Countdown Timer */}
+              <div className="w-full rounded-2xl bg-gradient-to-br from-[#ff7400]/20 to-[#ff7400]/5 border border-[#ff7400]/30 p-8 mb-6">
+                <p className="text-sm text-white/80 mb-3 font-medium">Wait for 12 hours</p>
+                <div className="text-4xl font-bold text-[#ff7400] font-mono tracking-wider">
+                  {remainingTime || 'Calculating...'}
+                </div>
+              </div>
+              
+              {/* Back Button */}
+              <Link
+                to="/browse"
+                className="w-full px-6 py-3 rounded-xl bg-[#ff7400] hover:bg-[#ff7400]/90 text-white font-semibold transition-colors text-center"
+              >
+                Back to Browse
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Modal */}
+      {showErrorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="backdrop-blur-xl bg-white/10 border border-red-500/30 rounded-3xl p-8 max-w-md w-full shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              {/* Error Icon */}
+              <div className="w-16 h-16 mb-6 rounded-full bg-red-500/20 flex items-center justify-center">
+                <XCircle className="h-10 w-10 text-red-400" />
+              </div>
+              
+              {/* Title */}
+              <h2 className="text-2xl font-bold text-white mb-3">Oops!</h2>
+              
+              {/* Message */}
+              <p className="text-white/70 mb-6 leading-relaxed">
+                {errorMessage}
+              </p>
+              
+              {/* Close Button */}
+              <button
+                onClick={() => setShowErrorModal(false)}
+                className="w-full px-6 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="backdrop-blur-xl bg-white/10 border border-[#ff7400]/30 rounded-3xl p-8 max-w-md w-full shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              {/* Icon */}
+              <div className="w-16 h-16 mb-6 rounded-full bg-[#ff7400]/20 flex items-center justify-center">
+                <Upload className="h-10 w-10 text-[#ff7400]" />
+              </div>
+              
+              {/* Title */}
+              <h2 className="text-2xl font-bold text-white mb-3">Add to Queue?</h2>
+              
+              {/* Message */}
+              <p className="text-white/70 mb-6 leading-relaxed">
+                Your photo will be added to the processing queue. This will use 1 of your {2 - usageCount} remaining matches for today.
+              </p>
+
+              {/* Preview */}
+              {previewUrl && (
+                <div className="w-full mb-6 rounded-2xl overflow-hidden border border-white/10">
+                  <img src={previewUrl} alt="Preview" className="w-full h-48 object-cover" />
+                </div>
+              )}
+              
+              {/* Buttons */}
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowConfirmModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold transition-colors border border-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmUpload}
+                  disabled={isUploading}
+                  className="flex-1 px-6 py-3 rounded-xl bg-[#ff7400] hover:bg-[#ff7400]/90 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isUploading ? 'Adding...' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       <main className="min-h-screen pt-6 lg:pt-12 pb-24 lg:pb-12 px-4 lg:px-6 lg:pl-80 lg:pr-12">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-8 lg:mb-12">
-            <h1 className="text-3xl lg:text-5xl font-medium text-white mb-3 lg:mb-4">Photo Matcher</h1>
-            <p className="text-white/60 text-base lg:text-lg">Upload a photo to find similar items instantly</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl lg:text-5xl font-medium text-white mb-3 lg:mb-4">Photo Matcher</h1>
+                <p className="text-white/60 text-base lg:text-lg">Upload a photo to find similar items instantly</p>
+              </div>
+              {/* Usage Indicator */}
+              <div className="hidden lg:flex items-center gap-3 px-4 py-2 rounded-xl bg-white/5 border border-white/10">
+                <div className="flex gap-1">
+                  {[0, 1].map((i) => (
+                    <div 
+                      key={i}
+                      className={`w-3 h-3 rounded-full ${
+                        i < usageCount ? 'bg-[#ff7400]' : 'bg-white/20'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <span className="text-sm text-white/70">
+                  {2 - usageCount} uses left today
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-white">Upload Photo</h2>
-                <div className="px-3 py-1 rounded-full bg-[#ff7400]/20 text-[#ff7400] text-sm font-medium">
-                  Step 1
+                <div className="flex items-center gap-2">
+                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    usageCount >= 2 ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'
+                  }`}>
+                    {2 - usageCount} uses left today
+                  </div>
+                  <div className="px-3 py-1 rounded-full bg-[#ff7400]/20 text-[#ff7400] text-sm font-medium">
+                    Step 1
+                  </div>
                 </div>
               </div>
               
@@ -283,7 +583,7 @@ export default function PhotoMatchPage() {
 
                   <button
                     onClick={handleUpload}
-                    disabled={isUploading}
+                    disabled={isUploading || usageCount >= 2}
                     className="w-full px-6 py-4 rounded-2xl bg-gradient-to-r from-[#ff7400] to-[#ff7400]/80 hover:shadow-lg hover:shadow-[#ff7400]/30 text-white font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isUploading ? (
@@ -291,10 +591,15 @@ export default function PhotoMatchPage() {
                         <Loader2 className="h-5 w-5 animate-spin" />
                         Adding to Queue...
                       </>
+                    ) : usageCount >= 2 ? (
+                      <>
+                        <Clock className="h-5 w-5" />
+                        Daily Limit Reached
+                      </>
                     ) : (
                       <>
                         <Upload className="h-5 w-5" />
-                        Add to Queue
+                        Add to Queue ({2 - usageCount} left)
                       </>
                     )}
                   </button>
@@ -326,18 +631,34 @@ export default function PhotoMatchPage() {
                 </div>
               ) : (
                 <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                  {queue.map((item) => (
-                    <div key={item.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                      <div className="flex items-start gap-4">
-                        <img src={item.imageUrl} alt="Queued" className="w-16 h-16 rounded-xl object-cover border border-white/10" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            {getStatusIcon(item.status)}
-                            <span className="font-medium text-white text-sm">
-                              {getStatusText(item.status, item.position)}
-                            </span>
-                          </div>
-                          <p className="text-xs text-white/50">{new Date(item.uploadedAt).toLocaleString()}</p>
+                  {queue.map((item, index) => {
+                    const isCurrentUser = item.userId === user?.uid;
+                    const estimatedWait = index * 10; // 10 seconds per position
+                    
+                    return (
+                      <div 
+                        key={item.id} 
+                        className={`rounded-2xl border p-4 ${
+                          isCurrentUser 
+                            ? 'border-[#ff7400] bg-[#ff7400]/10' 
+                            : 'border-white/10 bg-white/5'
+                        }`}
+                      >
+                        <div className="flex items-start gap-4">
+                          <img src={item.imageUrl} alt="Queued" className="w-16 h-16 rounded-xl object-cover border border-white/10" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              {getStatusIcon(item.status)}
+                              <span className="font-medium text-white text-sm">
+                                {getStatusText(item.status, item.position)}
+                              </span>
+                              {isCurrentUser && (
+                                <span className="text-xs bg-[#ff7400] text-white px-2 py-0.5 rounded-full">
+                                  You
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-white/50">{item.createdAt?.toDate().toLocaleString()}</p>
                           
                           {item.status === 'processing' && (
                             <div className="mt-3">
@@ -366,13 +687,14 @@ export default function PhotoMatchPage() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               )}
             </div>
           </div>
 
-          {queue.some(q => q.status === 'completed' && q.results) && (
+          {completedRequests.length > 0 && (
             <div className="space-y-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
@@ -381,7 +703,7 @@ export default function PhotoMatchPage() {
                 <h2 className="text-2xl font-bold text-white">Match Results</h2>
               </div>
               
-              {queue.filter(q => q.status === 'completed' && q.results).map((item) => (
+              {completedRequests.filter(q => q.results).map((item) => (
                 <div key={item.id} className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-6">
                   {/* Analysis Header */}
                   <div className="flex items-center gap-4 mb-6 pb-6 border-b border-white/10">
@@ -453,7 +775,12 @@ export default function PhotoMatchPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {item.results?.map((result, idx) => (
-                      <Link key={result.itemId} to={`/item/${result.itemId}`} className="rounded-2xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 hover:border-[#ff7400]/50 transition-all group relative">
+                      <Link 
+                        key={result.itemId} 
+                        to={`/item/${result.itemId}`}
+                        state={{ from: '/photo-match' }}
+                        className="rounded-2xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 hover:border-[#ff7400]/50 transition-all group relative"
+                      >
                         {idx === 0 && (
                           <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-white text-xs font-bold shadow-lg z-10">
                             #1
@@ -484,6 +811,7 @@ export default function PhotoMatchPage() {
           )}
         </div>
       </main>
+
     </>
   );
 }

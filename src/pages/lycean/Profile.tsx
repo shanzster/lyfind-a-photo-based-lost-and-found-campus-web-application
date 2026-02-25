@@ -1,9 +1,102 @@
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, LogOut, Sparkles, Package, MessageSquare, User } from 'lucide-react';
+import { ArrowLeft, LogOut, Sparkles, Package, MessageSquare, User, Loader2, Edit } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { itemService } from '@/services/itemService';
+import { userService } from '@/services/userService';
+import { toast } from 'sonner';
 
 export default function ProfilePage() {
+  const navigate = useNavigate();
+  const { user, userProfile, logout } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [userItems, setUserItems] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    totalItems: 0,
+    activeItems: 0,
+    resolvedItems: 0
+  });
+
+  useEffect(() => {
+    loadUserData();
+  }, [user]);
+
+  const loadUserData = async () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('[Profile] Current user ID:', user.uid);
+      console.log('[Profile] User email:', user.email);
+      
+      // Fix user profile if displayName is missing
+      if (userProfile && (!userProfile.displayName || userProfile.displayName === '')) {
+        const name = user.displayName || user.email?.split('@')[0] || 'User';
+        await userService.fixUserProfile(user.uid, name);
+        // Reload the page to get updated profile
+        window.location.reload();
+        return;
+      }
+
+      // Fetch user's items
+      console.log('[Profile] Fetching items for user:', user.uid);
+      const items = await itemService.getUserItems(user.uid);
+      console.log('[Profile] Fetched user items:', items.length);
+      console.log('[Profile] Items:', items);
+      setUserItems(items);
+
+      // Calculate stats
+      const activeItems = items.filter(item => item.status === 'active').length;
+      const resolvedItems = items.filter(item => item.status === 'resolved').length;
+
+      console.log('[Profile] Stats:', {
+        totalItems: items.length,
+        activeItems,
+        resolvedItems
+      });
+
+      setStats({
+        totalItems: items.length,
+        activeItems,
+        resolvedItems
+      });
+    } catch (error) {
+      console.error('[Profile] Error loading user data:', error);
+      toast.error('Failed to load profile data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Failed to logout');
+    }
+  };
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return 'N/A';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -38,17 +131,19 @@ export default function ProfilePage() {
             </Card>
           </Link>
 
-          <Card className="border-border bg-card p-6 hover:border-primary transition-colors cursor-pointer">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-lg bg-accent/10">
-                <Package className="h-6 w-6 text-accent" />
+          <Link to="/my-items">
+            <Card className="border-border bg-card p-6 hover:border-primary transition-colors cursor-pointer">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-accent/10">
+                  <Package className="h-6 w-6 text-accent" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">My Items</h3>
+                  <p className="text-sm text-foreground/60">{stats.totalItems} posts</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-foreground">My Items</h3>
-                <p className="text-sm text-foreground/60">View your posts</p>
-              </div>
-            </div>
-          </Card>
+            </Card>
+          </Link>
 
           <Link to="/messages">
             <Card className="border-border bg-card p-6 hover:border-primary transition-colors cursor-pointer">
@@ -68,26 +163,33 @@ export default function ProfilePage() {
         {/* Profile Info */}
         <Card className="border-border bg-card p-8">
           <div className="flex items-center gap-6 mb-8">
-            <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center">
-              <User className="h-10 w-10 text-primary" />
+            <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+              {userProfile?.photoURL ? (
+                <img src={userProfile.photoURL} alt={userProfile.displayName} className="w-full h-full object-cover" />
+              ) : (
+                <User className="h-10 w-10 text-primary" />
+              )}
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-foreground">John Doe</h2>
-              <p className="text-foreground/60">john.doe@example.com</p>
+              <h2 className="text-2xl font-bold text-foreground">{userProfile?.displayName || 'User'}</h2>
+              <p className="text-foreground/60">{user?.email}</p>
+              {userProfile?.studentId && (
+                <p className="text-sm text-foreground/40 mt-1">Student ID: {userProfile.studentId}</p>
+              )}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="text-center p-4 rounded-lg bg-background">
-              <p className="text-3xl font-bold text-primary">5</p>
+              <p className="text-3xl font-bold text-primary">{stats.totalItems}</p>
               <p className="text-sm text-foreground/60 mt-1">Items Posted</p>
             </div>
             <div className="text-center p-4 rounded-lg bg-background">
-              <p className="text-3xl font-bold text-accent">3</p>
+              <p className="text-3xl font-bold text-accent">{stats.activeItems}</p>
               <p className="text-sm text-foreground/60 mt-1">Active Items</p>
             </div>
             <div className="text-center p-4 rounded-lg bg-background">
-              <p className="text-3xl font-bold text-secondary">2</p>
+              <p className="text-3xl font-bold text-secondary">{stats.resolvedItems}</p>
               <p className="text-sm text-foreground/60 mt-1">Resolved</p>
             </div>
           </div>
@@ -95,23 +197,58 @@ export default function ProfilePage() {
           <div className="space-y-4 mb-8">
             <div>
               <label className="text-sm font-medium text-foreground/60">Full Name</label>
-              <p className="text-foreground mt-1">John Doe</p>
+              <p className="text-foreground mt-1">{userProfile?.displayName || 'Not set'}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-foreground/60">Email</label>
-              <p className="text-foreground mt-1">john.doe@example.com</p>
+              <p className="text-foreground mt-1">{user?.email}</p>
             </div>
+            {userProfile?.studentId && (
+              <div>
+                <label className="text-sm font-medium text-foreground/60">Student ID</label>
+                <p className="text-foreground mt-1">{userProfile.studentId}</p>
+              </div>
+            )}
+            {userProfile?.department && (
+              <div>
+                <label className="text-sm font-medium text-foreground/60">Department</label>
+                <p className="text-foreground mt-1">{userProfile.department}</p>
+              </div>
+            )}
+            {userProfile?.yearLevel && (
+              <div>
+                <label className="text-sm font-medium text-foreground/60">Year Level</label>
+                <p className="text-foreground mt-1">{userProfile.yearLevel}</p>
+              </div>
+            )}
+            {userProfile?.phoneNumber && (
+              <div>
+                <label className="text-sm font-medium text-foreground/60">Phone Number</label>
+                <p className="text-foreground mt-1">{userProfile.phoneNumber}</p>
+              </div>
+            )}
             <div>
               <label className="text-sm font-medium text-foreground/60">Member Since</label>
-              <p className="text-foreground mt-1">February 2024</p>
+              <p className="text-foreground mt-1">{formatDate(userProfile?.createdAt)}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground/60">Email Verified</label>
+              <p className="text-foreground mt-1">
+                {user?.emailVerified ? (
+                  <span className="text-green-500">✓ Verified</span>
+                ) : (
+                  <span className="text-yellow-500">⚠ Not verified</span>
+                )}
+              </p>
             </div>
           </div>
 
           <div className="flex gap-3 pt-6 border-t border-border">
-            <Button variant="outline">
+            <Button variant="outline" disabled>
+              <Edit className="h-4 w-4 mr-2" />
               Edit Profile
             </Button>
-            <Button variant="destructive">
+            <Button variant="destructive" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" />
               Logout
             </Button>

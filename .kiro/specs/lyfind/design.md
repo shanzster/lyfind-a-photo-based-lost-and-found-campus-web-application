@@ -18,7 +18,7 @@ LyFind is a Progressive Web Application built on Next.js 16 with TypeScript, des
 - **Styling**: Tailwind CSS, shadcn/ui components
 - **State Management**: React hooks, Context API
 - **PWA**: next-pwa, Workbox for service workers
-- **Maps**: Leaflet with OpenStreetMap (free, no API keys required)
+- **Maps**: Custom floor plan viewer with PNG images and pin-based location selection
 - **AI/ML**: TensorFlow.js with MobileNet for client-side image analysis
 - **Storage**: Cloud storage (AWS S3 or Cloudflare R2) for images
 - **Database**: PostgreSQL with Prisma ORM
@@ -157,9 +157,9 @@ interface Photo {
 }
 
 interface Location {
-  lat: number;
-  lng: number;
-  address?: string;
+  x: number; // Percentage (0-100)
+  y: number; // Percentage (0-100)
+  floorPlanId: string;
   buildingName?: string;
 }
 
@@ -222,37 +222,53 @@ interface MatchSuggestion {
 5. Generate match suggestions for scores > 70
 6. Rank suggestions by score and recency
 
-### 4. Campus Map Module
+### 4. Floor Plan Map Module
 
-**Purpose**: Interactive map for location selection and visualization
+**Purpose**: Interactive floor plan viewer for location selection and visualization
 
-**Research Findings**:
-- **Leaflet**: Lightweight, mobile-friendly, no API keys required
-- **OpenStreetMap**: Free tile provider, good campus coverage
-- **Offline Support**: Cache tiles in service worker for offline viewing
-- **React-Leaflet**: React wrapper for Leaflet integration
+**Implementation Details**:
+- **Floor Plans**: PNG images of building floor plans uploaded by admins
+- **Pin-Based Selection**: Users click on floor plan to pin exact location
+- **Multiple Buildings**: Support for multiple buildings and floors
+- **Offline Support**: Cache floor plan images in service worker for offline viewing
+- **Responsive**: Floor plans scale to fit different screen sizes
 
 **Key Components**:
-- `CampusMap`: Main map component with markers
-- `LocationPicker`: Interactive location selection
-- `MapMarker`: Custom marker for items
-- `MapCluster`: Cluster nearby markers for performance
+- `FloorPlanMap`: Main map component displaying floor plan with pins
+- `LocationPicker`: Interactive location selection with floor plan selector
+- `FloorPlanUploader`: Admin component for uploading floor plans
+- `PinMarker`: Custom marker component for items
 
 **Interface**:
 ```typescript
-interface MapProps {
-  center: [number, number];
-  zoom: number;
-  markers: MapMarker[];
-  onLocationSelect?: (location: Location) => void;
+interface FloorPlanMapProps {
+  floorPlanUrl: string;
+  pins?: MapPin[];
+  onPinAdd?: (location: { x: number; y: number }) => void;
   interactive?: boolean;
+  selectedPin?: string;
 }
 
-interface MapMarker {
+interface MapPin {
   id: string;
-  position: [number, number];
+  x: number; // Percentage (0-100)
+  y: number; // Percentage (0-100)
+  title: string;
   type: 'lost' | 'found';
-  item: ItemPost;
+}
+
+interface FloorPlan {
+  id: string;
+  name: string;
+  imageUrl: string;
+  buildingName: string;
+}
+
+interface Location {
+  x: number; // Percentage position on floor plan
+  y: number; // Percentage position on floor plan
+  floorPlanId: string;
+  buildingName?: string;
 }
 ```
 
@@ -419,9 +435,10 @@ model Item {
   description   String
   category      ItemCategory
   status        ItemStatus  @default(ACTIVE)
-  locationLat   Float
-  locationLng   Float
-  locationAddr  String?
+  locationX     Float?      // Percentage (0-100)
+  locationY     Float?      // Percentage (0-100)
+  floorPlanId   String?
+  buildingName  String?
   contactEmail  String?
   contactPhone  String?
   userId        String
@@ -429,6 +446,7 @@ model Item {
   updatedAt     DateTime    @updatedAt
   
   user          User        @relation(fields: [userId], references: [id])
+  floorPlan     FloorPlan?  @relation(fields: [floorPlanId], references: [id])
   photos        Photo[]
   matchesAsLost Match[]     @relation("LostItem")
   matchesAsFound Match[]    @relation("FoundItem")
@@ -436,6 +454,20 @@ model Item {
   @@index([type, status, createdAt])
   @@index([category])
   @@index([userId])
+  @@index([floorPlanId])
+}
+
+model FloorPlan {
+  id            String   @id @default(cuid())
+  name          String   // e.g., "Main Building - 1st Floor"
+  buildingName  String   // e.g., "Main Building"
+  imageUrl      String   // URL to floor plan PNG
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  items         Item[]
+  
+  @@index([buildingName])
 }
 
 model Photo {
@@ -641,18 +673,18 @@ enum NotificationType {
 *For any* item with multiple match suggestions, viewing the item should display all suggestions ranked by match score in descending order.
 **Validates: Requirements 5.6**
 
-### Map Integration Properties
+### Floor Plan Map Integration Properties
 
-**Property 17: Map marker displays item location**
-*For any* item with location coordinates, the map should display a marker at the exact coordinates when viewing the item detail or browse map view.
+**Property 17: Floor plan displays item location pin**
+*For any* item with location coordinates, the floor plan should display a pin at the exact percentage coordinates when viewing the item detail or browse map view.
 **Validates: Requirements 6.2, 6.3**
 
-**Property 18: Marker interaction shows item preview**
-*For any* map marker, clicking it should display a preview of the associated item post.
+**Property 18: Pin interaction shows item preview**
+*For any* floor plan pin, clicking or hovering over it should display a preview of the associated item post.
 **Validates: Requirements 6.4**
 
-**Property 19: Offline map displays cached tiles**
-*For any* previously viewed map area, when the user is offline, the map should display cached tiles for that area.
+**Property 19: Offline floor plan displays cached images**
+*For any* previously viewed floor plan, when the user is offline, the floor plan image should display from cache.
 **Validates: Requirements 6.6**
 
 ### Communication Properties

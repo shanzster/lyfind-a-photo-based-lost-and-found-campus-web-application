@@ -1,0 +1,176 @@
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  query,
+  where,
+  getDocs,
+  Timestamp,
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { User as FirebaseUser } from 'firebase/auth';
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+  studentId?: string;
+  department?: string;
+  yearLevel?: string;
+  phoneNumber?: string;
+  role: 'student' | 'faculty' | 'admin';
+  emailVerified: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  lastLoginAt: Timestamp;
+  itemsPosted: number;
+  itemsResolved: number;
+}
+
+const USERS_COLLECTION = 'users';
+
+export const userService = {
+  // Create user profile in Firestore
+  async createUserProfile(
+    firebaseUser: FirebaseUser,
+    additionalData?: Partial<UserProfile>
+  ): Promise<void> {
+    const userRef = doc(db, USERS_COLLECTION, firebaseUser.uid);
+    
+    // Check if user already exists
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      // Update last login
+      await this.updateLastLogin(firebaseUser.uid);
+      return;
+    }
+
+    // Create new user profile - only include defined fields
+    const userProfile: any = {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email!,
+      displayName: additionalData?.displayName || firebaseUser.displayName || '',
+      role: 'student', // Default role
+      emailVerified: firebaseUser.emailVerified,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      lastLoginAt: Timestamp.now(),
+      itemsPosted: 0,
+      itemsResolved: 0,
+    };
+
+    // Only add photoURL if it exists
+    if (firebaseUser.photoURL) {
+      userProfile.photoURL = firebaseUser.photoURL;
+    }
+
+    // Add additional data, filtering out undefined values (skip displayName as it's already set)
+    if (additionalData) {
+      Object.keys(additionalData).forEach(key => {
+        if (key === 'displayName') return; // Skip displayName as we already handled it
+        const value = additionalData[key as keyof UserProfile];
+        if (value !== undefined) {
+          userProfile[key] = value;
+        }
+      });
+    }
+
+    await setDoc(userRef, userProfile);
+  },
+
+  // Get user profile
+  async getUserProfile(uid: string): Promise<UserProfile | null> {
+    const userRef = doc(db, USERS_COLLECTION, uid);
+    const userSnap = await getDoc(userRef);
+
+    if (userSnap.exists()) {
+      return userSnap.data() as UserProfile;
+    }
+    return null;
+  },
+
+  // Update user profile
+  async updateUserProfile(
+    uid: string,
+    updates: Partial<UserProfile>
+  ): Promise<void> {
+    const userRef = doc(db, USERS_COLLECTION, uid);
+    await updateDoc(userRef, {
+      ...updates,
+      updatedAt: Timestamp.now(),
+    });
+  },
+
+  // Update last login timestamp
+  async updateLastLogin(uid: string): Promise<void> {
+    const userRef = doc(db, USERS_COLLECTION, uid);
+    await updateDoc(userRef, {
+      lastLoginAt: Timestamp.now(),
+    });
+  },
+
+  // Increment items posted count
+  async incrementItemsPosted(uid: string): Promise<void> {
+    const userProfile = await this.getUserProfile(uid);
+    if (userProfile) {
+      await this.updateUserProfile(uid, {
+        itemsPosted: userProfile.itemsPosted + 1,
+      });
+    }
+  },
+
+  // Increment items resolved count
+  async incrementItemsResolved(uid: string): Promise<void> {
+    const userProfile = await this.getUserProfile(uid);
+    if (userProfile) {
+      await this.updateUserProfile(uid, {
+        itemsResolved: userProfile.itemsResolved + 1,
+      });
+    }
+  },
+
+  // Check if email is from LSB domain
+  isLSBEmail(email: string): boolean {
+    return email.toLowerCase().endsWith('@lsb.edu.ph');
+  },
+
+  // Get user by email
+  async getUserByEmail(email: string): Promise<UserProfile | null> {
+    const q = query(
+      collection(db, USERS_COLLECTION),
+      where('email', '==', email)
+    );
+    const snapshot = await getDocs(q);
+
+    if (!snapshot.empty) {
+      return snapshot.docs[0].data() as UserProfile;
+    }
+    return null;
+  },
+
+  // Get all users (admin only)
+  async getAllUsers(): Promise<UserProfile[]> {
+    const snapshot = await getDocs(collection(db, USERS_COLLECTION));
+    return snapshot.docs.map(doc => doc.data() as UserProfile);
+  },
+
+  // Fix user profile (for existing users with missing data)
+  async fixUserProfile(uid: string, displayName: string): Promise<void> {
+    const userRef = doc(db, USERS_COLLECTION, uid);
+    const userSnap = await getDoc(userRef);
+    
+    if (userSnap.exists()) {
+      const data = userSnap.data();
+      // Only update if displayName is missing or empty
+      if (!data.displayName || data.displayName === '') {
+        await updateDoc(userRef, {
+          displayName: displayName,
+          updatedAt: Timestamp.now(),
+        });
+      }
+    }
+  },
+};

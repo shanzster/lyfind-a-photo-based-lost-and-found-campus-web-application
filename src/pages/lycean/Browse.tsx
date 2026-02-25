@@ -1,105 +1,127 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, MapPin, Eye, Mail, Clock, TrendingUp, X, Navigation } from 'lucide-react'
+import { Search, MapPin, Eye, Mail, Clock, TrendingUp, X, Navigation, Loader2, Image as ImageIcon } from 'lucide-react'
 import LyceanSidebar from '@/components/lycean-sidebar'
+import { itemService, Item } from '@/services/itemService'
+import { userService } from '@/services/userService'
+import { useAuth } from '@/contexts/AuthContext'
+import { toast } from 'sonner'
 
-const mockItems = [
-  {
-    id: 1,
-    title: 'Blue Nike Backpack',
-    category: 'Bags',
-    type: 'lost',
-    location: 'Library - 2nd Floor',
-    date: '2 hours ago',
-    image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=300&fit=crop',
-    description: 'Lost blue Nike backpack with laptop inside. Has a small tear on the front pocket.',
-    user: 'Alex Martinez',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex',
-    views: 24,
-    messages: 3,
-    trending: true
-  },
-  {
-    id: 2,
-    title: 'iPhone 13 Pro',
-    category: 'Electronics',
-    type: 'found',
-    location: 'Cafeteria',
-    date: '5 hours ago',
-    image: 'https://images.unsplash.com/photo-1592286927505-c0d6c9c24e5a?w=400&h=300&fit=crop',
-    description: 'Found iPhone 13 Pro with blue case. Screen has a small crack.',
-    user: 'Maria Santos',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Maria',
-    views: 45,
-    messages: 8,
-    trending: true
-  },
-  {
-    id: 3,
-    title: 'Silver Bracelet',
-    category: 'Jewelry',
-    type: 'lost',
-    location: 'Gym',
-    date: '1 day ago',
-    image: 'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&h=300&fit=crop',
-    description: 'Lost silver bracelet with heart charm. Sentimental value.',
-    user: 'John Reyes',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John',
-    views: 67,
-    messages: 5,
-    trending: false
-  },
-  {
-    id: 4,
-    title: 'Black Wallet',
-    category: 'Accessories',
-    type: 'found',
-    location: 'Parking Lot',
-    date: '3 hours ago',
-    image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&h=300&fit=crop',
-    description: 'Found black leather wallet near the parking lot entrance. Contains ID.',
-    user: 'Sarah Cruz',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-    views: 89,
-    messages: 12,
-    trending: true
-  },
-  {
-    id: 5,
-    title: 'Red Umbrella',
-    category: 'Accessories',
-    type: 'lost',
-    location: 'Computer Lab',
-    date: '6 hours ago',
-    image: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop',
-    description: 'Lost red umbrella with wooden handle. Left in Computer Lab 3.',
-    user: 'David Tan',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David',
-    views: 31,
-    messages: 2,
-    trending: false
-  }
-]
+const categories = ['All', 'Bags', 'Electronics', 'Jewelry', 'Accessories', 'Keys', 'Clothing', 'Books', 'Other']
 
-const categories = ['All', 'Bags', 'Electronics', 'Jewelry', 'Accessories', 'Keys', 'Clothing']
+// Helper function to format timestamp
+const formatTimestamp = (timestamp: any) => {
+  if (!timestamp) return 'Unknown'
+  
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+  
+  if (diffMins < 60) return `${diffMins} ${diffMins === 1 ? 'minute' : 'minutes'} ago`
+  if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`
+  if (diffDays < 7) return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`
+  return date.toLocaleDateString()
+}
 
 export default function BrowsePage() {
+  const { user } = useAuth()
+  const [items, setItems] = useState<Item[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [selectedType, setSelectedType] = useState('All')
   const [searchQuery, setSearchQuery] = useState('')
   const [showMapModal, setShowMapModal] = useState(false)
-  const [selectedItemForMap, setSelectedItemForMap] = useState<typeof mockItems[0] | null>(null)
+  const [selectedItemForMap, setSelectedItemForMap] = useState<Item | null>(null)
 
-  const filteredItems = mockItems.filter((item) => {
-    const categoryMatch = selectedCategory === 'All' || item.category === selectedCategory
-    const typeMatch = selectedType === 'All' || item.type.toLowerCase() === selectedType.toLowerCase()
-    const searchMatch = searchQuery === '' || item.title.toLowerCase().includes(searchQuery.toLowerCase())
-    return categoryMatch && typeMatch && searchMatch
+  // Fetch items from Firestore
+  useEffect(() => {
+    const fetchItems = async () => {
+      try {
+        setLoading(true)
+        const filters: any = { status: 'active' }
+        
+        if (selectedType !== 'All') {
+          filters.type = selectedType.toLowerCase()
+        }
+        
+        if (selectedCategory !== 'All') {
+          filters.category = selectedCategory
+        }
+        
+        console.log('[Browse] Fetching items with filters:', filters)
+        const fetchedItems = await itemService.getAllItems(filters)
+        console.log('[Browse] Fetched items:', fetchedItems.length)
+        
+        // Fetch user photos for items that don't have userPhotoURL
+        const itemsWithPhotos = await Promise.all(
+          fetchedItems.map(async (item) => {
+            if (!item.userPhotoURL && item.userId) {
+              try {
+                const userProfile = await userService.getUserProfile(item.userId)
+                return { ...item, userPhotoURL: userProfile?.photoURL }
+              } catch (error) {
+                console.error('[Browse] Error fetching user photo for', item.userId, error)
+                return item
+              }
+            }
+            return item
+          })
+        )
+        
+        if (itemsWithPhotos.length > 0) {
+          console.log('[Browse] Sample item with photo:', {
+            title: itemsWithPhotos[0].title,
+            userPhotoURL: itemsWithPhotos[0].userPhotoURL,
+            userName: itemsWithPhotos[0].userName
+          })
+        }
+        setItems(itemsWithPhotos)
+      } catch (error: any) {
+        console.error('[Browse] Error fetching items:', error)
+        console.error('[Browse] Error code:', error?.code)
+        console.error('[Browse] Error message:', error?.message)
+        toast.error(`Failed to load items: ${error?.message || 'Unknown error'}`)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchItems()
+  }, [selectedType, selectedCategory])
+
+  // Client-side search filtering
+  const filteredItems = items.filter((item) => {
+    if (searchQuery === '') return true
+    const searchLower = searchQuery.toLowerCase()
+    return (
+      item.title.toLowerCase().includes(searchLower) ||
+      item.description.toLowerCase().includes(searchLower)
+    )
   })
 
-  const handleShowMap = (item: typeof mockItems[0]) => {
+  const handleShowMap = (item: Item) => {
     setSelectedItemForMap(item)
     setShowMapModal(true)
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <>
+        <LyceanSidebar />
+        <main className="min-h-screen pt-6 lg:pt-12 pb-24 lg:pb-12 px-4 lg:px-6 lg:pl-80 lg:pr-12">
+          <div className="max-w-7xl mx-auto flex items-center justify-center min-h-[60vh]">
+            <div className="text-center">
+              <Loader2 className="w-12 h-12 text-[#ff7400] animate-spin mx-auto mb-4" />
+              <p className="text-white/60 text-lg">Loading items...</p>
+            </div>
+          </div>
+        </main>
+      </>
+    )
   }
 
   return (
@@ -204,11 +226,17 @@ export default function BrowsePage() {
                 >
                   {/* Image */}
                   <div className="relative h-32 lg:h-56 overflow-hidden">
-                    <img
-                      src={item.image}
-                      alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    />
+                    {item.photos && item.photos.length > 0 ? (
+                      <img
+                        src={item.photos[0]}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center">
+                        <ImageIcon className="w-12 h-12 text-white/20" />
+                      </div>
+                    )}
                     
                     {/* Gradient Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-[#2f1632] via-transparent to-transparent opacity-60"></div>
@@ -221,14 +249,6 @@ export default function BrowsePage() {
                     }`}>
                       {item.type.charAt(0).toUpperCase() + item.type.slice(1)}
                     </div>
-
-                    {/* Trending Badge */}
-                    {item.trending && (
-                      <div className="absolute top-2 lg:top-4 right-2 lg:right-4 px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-[10px] lg:text-xs font-medium backdrop-blur-md bg-[#ff7400]/90 text-white shadow-lg flex items-center gap-1">
-                        <TrendingUp className="w-2.5 lg:w-3 h-2.5 lg:h-3" />
-                        <span className="hidden lg:inline">Trending</span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Content */}
@@ -247,11 +267,11 @@ export default function BrowsePage() {
                     <div className="space-y-1 lg:space-y-2 mb-3 lg:mb-5">
                       <div className="flex items-center gap-1.5 lg:gap-2 text-white/40 text-[10px] lg:text-sm">
                         <MapPin className="w-3 lg:w-4 h-3 lg:h-4 flex-shrink-0 text-[#ff7400]" />
-                        <span className="line-clamp-1">{item.location}</span>
+                        <span className="line-clamp-1">{item.location.address || `${item.location.lat.toFixed(4)}, ${item.location.lng.toFixed(4)}`}</span>
                       </div>
                       <div className="flex items-center gap-1.5 lg:gap-2 text-white/40 text-[10px] lg:text-sm">
                         <Clock className="w-3 lg:w-4 h-3 lg:h-4 flex-shrink-0 text-[#ff7400]" />
-                        <span>{item.date}</span>
+                        <span>{formatTimestamp(item.createdAt)}</span>
                       </div>
                     </div>
 
@@ -260,16 +280,16 @@ export default function BrowsePage() {
                       {/* User - Avatar only on mobile, full info on desktop */}
                       <div className="flex items-center gap-2 lg:gap-3 min-w-0">
                         <img
-                          src={item.avatar}
-                          alt={item.user}
+                          src={item.userPhotoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.userName)}&background=ff7400&color=fff&size=128`}
+                          alt={item.userName}
                           className="w-7 lg:w-10 h-7 lg:h-10 rounded-full bg-white/10 ring-1 lg:ring-2 ring-white/10 group-hover:ring-[#ff7400]/30 transition-all flex-shrink-0"
+                          onError={(e) => {
+                            e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.userName)}&background=ff7400&color=fff&size=128`;
+                          }}
                         />
                         <div className="hidden lg:flex flex-col min-w-0">
-                          <span className="text-white/80 text-sm font-medium truncate">{item.user}</span>
-                          <span className="text-white/30 text-xs flex items-center gap-1">
-                            <Eye className="w-3 h-3" />
-                            {item.views} views
-                          </span>
+                          <span className="text-white/80 text-sm font-medium truncate">{item.userName}</span>
+                          <span className="text-white/30 text-xs">{item.category}</span>
                         </div>
                       </div>
 
@@ -290,11 +310,6 @@ export default function BrowsePage() {
                         
                         <button className="w-7 lg:w-10 h-7 lg:h-10 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 flex items-center justify-center hover:bg-[#ff7400] hover:border-[#ff7400] hover:scale-110 transition-all group/btn relative">
                           <Mail className="w-3 lg:w-4 h-3 lg:h-4 text-white/60 group-hover/btn:text-white" />
-                          {item.messages > 0 && (
-                            <span className="absolute -top-0.5 lg:-top-1 -right-0.5 lg:-right-1 w-4 lg:w-5 h-4 lg:h-5 bg-[#ff7400] rounded-full text-[8px] lg:text-[10px] font-medium text-white flex items-center justify-center shadow-lg animate-pulse">
-                              {item.messages}
-                            </span>
-                          )}
                         </button>
                       </div>
                     </div>
@@ -366,13 +381,13 @@ export default function BrowsePage() {
                     <MapPin className="w-7 h-7 text-white" />
                   </div>
                   <div className="flex-1">
-                    <h5 className="text-white font-medium text-lg lg:text-xl mb-2">{selectedItemForMap.location}</h5>
+                    <h5 className="text-white font-medium text-lg lg:text-xl mb-2">{selectedItemForMap.location.address || 'Campus Location'}</h5>
                     <p className="text-white/60 text-sm lg:text-base mb-3">
                       {selectedItemForMap.type === 'lost' ? 'Last seen at this location' : 'Found at this location'}
                     </p>
                     <div className="flex items-center gap-2 text-white/50 text-sm">
                       <Clock className="w-4 h-4" />
-                      <span>{selectedItemForMap.date}</span>
+                      <span>{formatTimestamp(selectedItemForMap.createdAt)}</span>
                     </div>
                   </div>
                   <button className="w-full lg:w-auto px-6 lg:px-8 py-3 lg:py-4 bg-[#ff7400] text-white rounded-xl lg:rounded-2xl text-sm lg:text-base font-medium hover:bg-[#ff7400]/90 transition-all shadow-lg shadow-[#ff7400]/30 flex items-center justify-center gap-2">
@@ -386,11 +401,17 @@ export default function BrowsePage() {
             {/* Footer with Item Preview */}
             <div className="p-6 lg:p-8 border-t border-white/10 bg-white/5">
               <div className="flex items-center gap-4">
-                <img
-                  src={selectedItemForMap.image}
-                  alt={selectedItemForMap.title}
-                  className="w-16 lg:w-20 h-16 lg:h-20 rounded-xl object-cover ring-2 ring-white/10"
-                />
+                {selectedItemForMap.photos && selectedItemForMap.photos.length > 0 ? (
+                  <img
+                    src={selectedItemForMap.photos[0]}
+                    alt={selectedItemForMap.title}
+                    className="w-16 lg:w-20 h-16 lg:h-20 rounded-xl object-cover ring-2 ring-white/10"
+                  />
+                ) : (
+                  <div className="w-16 lg:w-20 h-16 lg:h-20 rounded-xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center ring-2 ring-white/10">
+                    <ImageIcon className="w-8 h-8 text-white/20" />
+                  </div>
+                )}
                 <div className="flex-1">
                   <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium mb-2 ${
                     selectedItemForMap.type === 'lost'

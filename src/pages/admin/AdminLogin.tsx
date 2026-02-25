@@ -1,56 +1,71 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Mail, Lock, Eye, EyeOff, Shield } from 'lucide-react'
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Mail, Lock, Eye, EyeOff, Loader2, Shield } from 'lucide-react';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
+import { toast } from 'sonner';
 
 export default function AdminLoginPage() {
-  const [showPassword, setShowPassword] = useState(false)
+  const navigate = useNavigate();
+  const { login, user, adminProfile } = useAdminAuth();
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: ''
-  })
+  });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Handle admin login logic here
-    console.log('Admin Login:', formData)
-    // navigate('/admin/dashboard')
-  }
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user && adminProfile) {
+      navigate('/admin/dashboard', { replace: true });
+    }
+  }, [user, adminProfile, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    setIsLoading(true);
+    
+    try {
+      await login(formData.email, formData.password);
+      // Navigation will happen via useEffect above
+    } catch (error: any) {
+      console.error('Login error:', error);
+      toast.error(error.message || 'Failed to login');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <main className="min-h-screen pt-24 flex items-center justify-center px-6">
+    <main className="min-h-screen flex items-center justify-center px-6 bg-gradient-to-br from-[#2f1632] via-[#1a1a2e] to-[#0f0f1e]">
       <div className="max-w-md w-full">
-        {/* Logo */}
+        {/* Logo & Title */}
         <div className="text-center mb-8">
-          <Link to="/" className="inline-block">
-            <div className="relative inline-block mb-4">
-              {/* Orange gradient circle behind */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-32 h-32 bg-gradient-to-br from-[#ff7400]/30 via-[#ff7400]/20 to-transparent rounded-full blur-2xl animate-pulse"></div>
-              </div>
-              
-              {/* Logo with float animation */}
-              <div className="relative animate-[float_3s_ease-in-out_infinite]">
-                <img 
-                  src="/Untitled design (3).png" 
-                  alt="LyFind" 
-                  className="w-20 h-20"
-                />
+          <div className="relative inline-block mb-6">
+            {/* Glow effect */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-32 h-32 bg-gradient-to-br from-[#ff7400]/30 via-[#ff7400]/20 to-transparent rounded-full blur-2xl animate-pulse"></div>
+            </div>
+            
+            {/* Shield icon for admin */}
+            <div className="relative">
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#ff7400] to-[#ff5500] flex items-center justify-center shadow-2xl shadow-[#ff7400]/50">
+                <Shield className="w-10 h-10 text-white" />
               </div>
             </div>
-          </Link>
-          <h1 className="text-4xl font-normal text-white mb-2">Admin Portal</h1>
-          <div className="flex items-center justify-center gap-2 text-white/60">
-            <Shield className="w-5 h-5" />
-            <span>System Administration</span>
           </div>
+          
+          <h1 className="text-4xl font-bold text-white mb-2">Admin Portal</h1>
+          <p className="text-white/60 text-sm">LyFind Administration System</p>
         </div>
 
         {/* Login Form */}
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
+        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email */}
             <div>
-              <label className="block text-white/70 text-sm mb-2">Admin Email</label>
+              <label className="block text-white/70 text-sm mb-2 font-medium">Admin Email</label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
                 <input
@@ -60,13 +75,14 @@ export default function AdminLoginPage() {
                   className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-[#ff7400]/50 focus:bg-white/10 transition-all"
                   placeholder="admin@lsb.edu.ph"
                   required
+                  disabled={isLoading}
                 />
               </div>
             </div>
 
             {/* Password */}
             <div>
-              <label className="block text-white/70 text-sm mb-2">Password</label>
+              <label className="block text-white/70 text-sm mb-2 font-medium">Password</label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
                 <input
@@ -76,74 +92,67 @@ export default function AdminLoginPage() {
                   className="w-full pl-12 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-[#ff7400]/50 focus:bg-white/10 transition-all"
                   placeholder="Enter your password"
                   required
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
+                  disabled={isLoading}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
 
-            {/* Remember & Forgot */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#ff7400] focus:ring-[#ff7400] focus:ring-offset-0"
-                />
-                <span className="text-white/60 text-sm">Remember me</span>
-              </label>
-              <Link to="/admin/forgot-password" className="text-[#ff7400] hover:text-[#ff8500] text-sm transition-colors">
-                Forgot password?
-              </Link>
+            {/* Security Notice */}
+            <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+              <div className="flex items-start gap-3">
+                <Shield className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-yellow-200 font-medium mb-1">Secure Access</p>
+                  <p className="text-xs text-yellow-200/70">
+                    This portal is restricted to authorized administrators only. All login attempts are logged and monitored.
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full py-3 bg-[#ff7400] hover:bg-[#ff8500] text-white font-medium rounded-xl transition-all shadow-lg shadow-[#ff7400]/20"
+              disabled={isLoading}
+              className="w-full py-3 bg-gradient-to-r from-[#ff7400] to-[#ff5500] hover:from-[#ff8500] hover:to-[#ff6600] text-white font-semibold rounded-xl transition-all shadow-lg shadow-[#ff7400]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              Sign In as Admin
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Authenticating...
+                </>
+              ) : (
+                <>
+                  <Shield className="w-5 h-5" />
+                  Sign In as Admin
+                </>
+              )}
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-[#2f1632] text-white/40">or</span>
-            </div>
-          </div>
-
-          {/* Other Login Options */}
-          <div className="space-y-3">
-            <Link 
-              to="/login"
-              className="block text-center px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-all text-sm"
-            >
-              Student Login
-            </Link>
-            <Link 
-              to="/faculty/login"
-              className="block text-center px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-all text-sm"
-            >
-              Faculty Login
-            </Link>
+          {/* Footer */}
+          <div className="mt-6 pt-6 border-t border-white/10">
+            <p className="text-center text-white/40 text-xs">
+              Need help? Contact the system administrator
+            </p>
           </div>
         </div>
 
-        {/* Back to Home */}
+        {/* Back to Main Site */}
         <div className="text-center mt-6">
-          <Link to="/" className="text-white/50 hover:text-white/70 text-sm transition-colors">
-            ← Back to Home
-          </Link>
+          <a href="/" className="text-white/50 hover:text-white/70 text-sm transition-colors">
+            ← Back to Main Site
+          </a>
         </div>
       </div>
     </main>
-  )
+  );
 }
