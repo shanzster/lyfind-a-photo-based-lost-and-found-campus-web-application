@@ -13,6 +13,7 @@ import {
   setDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { notificationService } from './notificationService';
 
 export interface Message {
   id?: string;
@@ -164,16 +165,20 @@ export const messageService = {
     content: string,
     senderPhoto?: string
   ): Promise<void> {
-    // Add message
-    const messageData: Omit<Message, 'id'> = {
+    // Add message - only include senderPhoto if it exists
+    const messageData: any = {
       conversationId,
       senderId,
       senderName,
-      senderPhoto,
       content,
       read: false,
       createdAt: Timestamp.now(),
     };
+
+    // Only add senderPhoto if it has a value
+    if (senderPhoto) {
+      messageData.senderPhoto = senderPhoto;
+    }
 
     await addDoc(collection(db, MESSAGES_COLLECTION), messageData);
 
@@ -197,6 +202,19 @@ export const messageService = {
       updatedAt: Timestamp.now(),
       unreadCount: newUnreadCount,
     });
+
+    // Send notification to recipient
+    try {
+      await notificationService.notifyNewMessage(
+        otherUserId,
+        senderName,
+        senderId,
+        conversationId
+      );
+    } catch (error) {
+      console.error('[MessageService] Failed to send notification:', error);
+      // Don't throw - message was sent successfully
+    }
   },
 
   // Get messages for conversation
@@ -211,6 +229,11 @@ export const messageService = {
     return snapshot.docs.map(
       (doc) => ({ id: doc.id, ...doc.data() } as Message)
     );
+  },
+
+  // Alias for getMessages (for consistency)
+  async getConversationMessages(conversationId: string): Promise<Message[]> {
+    return this.getMessages(conversationId);
   },
 
   // Listen to messages (real-time)

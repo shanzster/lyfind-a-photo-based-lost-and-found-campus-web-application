@@ -15,6 +15,8 @@ import { db } from '@/lib/firebase';
 import { extractFeatures, analyzeImage, findMatches } from './aiPhotoMatcher';
 import { itemService, Item } from './itemService';
 import { storageService } from './storageService';
+import { aiMatchingService } from './aiMatchingService';
+import { notificationService } from './notificationService';
 
 export interface PhotoMatchRequest {
   id?: string;
@@ -283,6 +285,30 @@ export const photoMatchService = {
       // Calculate processing time
       const processingTime = (Date.now() - startTime) / 1000;
 
+      // Store each match result in aiMatches collection for admin monitoring
+      await this.updateMatchRequest(requestId, {
+        progress: 95,
+        currentStep: 'Saving match results...',
+      });
+
+      for (const result of results) {
+        try {
+          await aiMatchingService.createMatch({
+            queryItemId: requestId,
+            queryItemTitle: 'Photo Match Query',
+            queryImageUrl: imageUrl,
+            matchedItemId: result.itemId,
+            matchedItemTitle: result.title,
+            matchedImageUrl: result.imageUrl,
+            similarityScore: result.score,
+            matchedBy: request.userId,
+            matchedByName: 'User',
+          });
+        } catch (error) {
+          console.error('[PhotoMatch] Failed to save match result:', error);
+        }
+      }
+
       // Complete with results
       await this.updateMatchRequest(requestId, {
         status: 'completed',
@@ -300,7 +326,20 @@ export const photoMatchService = {
         },
       });
 
-      console.log('[PhotoMatch] Processing complete:', results.length, 'matches found');
+      console.log('[PhotoMatch] Processing complete:', results.length, 'matches found and saved');
+
+      // Send notification to user if matches were found
+      if (results.length > 0) {
+        try {
+          await notificationService.notifyMatch(
+            request.userId,
+            results.length
+          );
+        } catch (error) {
+          console.error('[PhotoMatch] Failed to send notification:', error);
+          // Don't throw - processing was successful
+        }
+      }
     } catch (error) {
       console.error('[PhotoMatch] Processing failed:', error);
       

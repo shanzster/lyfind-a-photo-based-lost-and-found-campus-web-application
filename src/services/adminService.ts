@@ -12,9 +12,10 @@ import {
   addDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { notificationService } from './notificationService';
 
-export type AdminRole = 'super_admin' | 'moderator' | 'support';
-export type AdminLevel = 'super' | 'standard';
+export type AdminRole = 'super_admin';
+export type AdminLevel = 'super';
 
 export interface AdminUser {
   uid: string;
@@ -78,22 +79,6 @@ const PERMISSIONS = {
     'admins.create', 'admins.edit', 'admins.delete',
     'logs.view', 'logs.export',
     'system.backup', 'system.restore', 'system.shutdown'
-  ],
-  moderator: [
-    'users.view', 'users.suspend', 'users.ban',
-    'items.view', 'items.edit', 'items.delete',
-    'items.approve', 'items.reject', 'items.request_info',
-    'reports.view', 'reports.handle',
-    'messages.view', 'messages.delete',
-    'analytics.view'
-  ],
-  support: [
-    'users.view',
-    'items.view',
-    'items.approve', 'items.request_info',
-    'reports.view',
-    'messages.view',
-    'analytics.view'
   ]
 };
 
@@ -222,6 +207,10 @@ export const adminService = {
   // Approve post
   async approvePost(itemId: string, adminUid: string, note?: string): Promise<void> {
     try {
+      // Get item details first for notification
+      const itemDoc = await getDoc(doc(db, 'items', itemId));
+      const itemData = itemDoc.data();
+
       await updateDoc(doc(db, 'items', itemId), {
         status: 'active',
         'approval.reviewedAt': Timestamp.now(),
@@ -233,6 +222,19 @@ export const adminService = {
 
       // Log admin action
       await this.logAdminAction(adminUid, 'approve_post', itemId, { note });
+
+      // Send notification to user
+      if (itemData) {
+        try {
+          await notificationService.notifyItemApproved(
+            itemData.userId,
+            itemData.title,
+            itemId
+          );
+        } catch (error) {
+          console.error('[AdminService] Failed to send approval notification:', error);
+        }
+      }
     } catch (error) {
       console.error('Error approving post:', error);
       throw error;
@@ -242,6 +244,10 @@ export const adminService = {
   // Reject post
   async rejectPost(itemId: string, adminUid: string, reason: string): Promise<void> {
     try {
+      // Get item details first for notification
+      const itemDoc = await getDoc(doc(db, 'items', itemId));
+      const itemData = itemDoc.data();
+
       await updateDoc(doc(db, 'items', itemId), {
         status: 'rejected',
         'approval.reviewedAt': Timestamp.now(),
@@ -252,6 +258,20 @@ export const adminService = {
 
       // Log admin action
       await this.logAdminAction(adminUid, 'reject_post', itemId, { reason });
+
+      // Send notification to user
+      if (itemData) {
+        try {
+          await notificationService.notifyItemRejected(
+            itemData.userId,
+            itemData.title,
+            itemId,
+            reason
+          );
+        } catch (error) {
+          console.error('[AdminService] Failed to send rejection notification:', error);
+        }
+      }
     } catch (error) {
       console.error('Error rejecting post:', error);
       throw error;
@@ -443,5 +463,126 @@ export const adminService = {
       console.error('Error getting admin logs:', error);
       return [];
     }
+  },
+
+  // Create user account (admin only)
+  async createUserAccount(
+    adminUid: string,
+    userData: {
+      email: string;
+      displayName: string;
+      studentId?: string;
+      department?: string;
+      yearLevel?: string;
+      phoneNumber?: string;
+      role?: 'user' | 'admin';
+    },
+    adminRole?: AdminRole
+  ): Promise<{ success: boolean; password?: string; error?: string }> {
+    try {
+      // Validate email is @lsb.edu.ph
+      if (!userData.email.toLowerCase().endsWith('@lsb.edu.ph')) {
+        return {
+          success: false,
+          error: 'Only @lsb.edu.ph email addresses are allowed'
+        };
+      }
+
+      // Check if user already exists
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('email', '==', userData.email.toLowerCase())
+      );
+      const existingUsers = await getDocs(usersQuery);
+      
+      if (!existingUsers.empty) {
+        return {
+          success: false,
+          error: 'User with this email already exists'
+        };
+      }
+
+      // Check if admin already exists (if creating admin)
+      if (userData.role === 'admin') {
+        const adminsQuery = query(
+          collection(db, 'admins'),
+          where('email', '==', userData.email.toLowerCase())
+        );
+        const existingAdmins = await getDocs(adminsQuery);
+        
+        if (!existingAdmins.empty) {
+          return {
+            success: false,
+            error: 'Admin with this email already exists'
+          };
+        }
+      }
+
+      // Generate random password (8 characters: letters + numbers)
+      const password = this.generatePassword();
+
+      if (userData.role === 'admin' && adminRole) {
+        // Create admin account
+        const adminRef = await addDoc(collection(db, 'pendingAdmins'), {
+          email: userData.email.toLowerCase(),
+          displayName: userData.displayName,
+          role: 'super_admin',
+          adminLevel: 'super',
+          permissions: PERMISSIONS['super_admin'],
+          temporaryPassword: password,
+          createdBy: adminUid,
+          createdAt: Timestamp.now(),
+          status: 'pending_activation',
+          emailSent: false,
+          twoFactorEnabled: false,
+          active: false
+        });
+
+        // Log admin action
+        await this.logAdminAction(adminUid, 'create_admin', adminRef.id, { 
+          email: userData.email,
+          role: 'super_admin'
+        });
+      } else {
+        // Create regular user account
+        const userRef = await addDoc(collection(db, 'pendingUsers'), {
+          email: userData.email.toLowerCase(),
+          displayName: userData.displayName,
+          studentId: userData.studentId || '',
+          department: userData.department || '',
+          yearLevel: userData.yearLevel || '',
+          phoneNumber: userData.phoneNumber || '',
+          temporaryPassword: password,
+          createdBy: adminUid,
+          createdAt: Timestamp.now(),
+          status: 'pending_activation',
+          emailSent: false
+        });
+
+        // Log admin action
+        await this.logAdminAction(adminUid, 'create_user', userRef.id, userData);
+      }
+
+      return {
+        success: true,
+        password
+      };
+    } catch (error) {
+      console.error('Error creating user account:', error);
+      return {
+        success: false,
+        error: 'Failed to create user account'
+      };
+    }
+  },
+
+  // Generate random password
+  generatePassword(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let password = '';
+    for (let i = 0; i < 8; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
   }
 };

@@ -26,7 +26,9 @@ export default function ReportsManagement() {
   const loadReports = async () => {
     setLoading(true);
     try {
+      console.log('[ReportsManagement] Loading reports with filter:', filterStatus);
       const data = await reportService.getAllReports({ status: filterStatus });
+      console.log('[ReportsManagement] Loaded reports:', data.length, data);
       setReports(data);
     } catch (error) {
       console.error('Error loading reports:', error);

@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, User, Mail, Calendar, Package, MessageSquare, 
-  Edit, Save, X, Key, UserX, Ban, Shield, AlertTriangle
+  Edit, Save, X, Key, UserX, Ban, Shield, AlertTriangle, Loader2
 } from 'lucide-react';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { adminService } from '@/services/adminService';
+import { messageService } from '@/services/messageService';
 import { toast } from 'sonner';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -30,6 +31,14 @@ export default function UserDetails() {
   const [suspendDuration, setSuspendDuration] = useState(7);
   const [banReason, setBanReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  
+  // Messages modal state
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
+  const [userConversations, setUserConversations] = useState<any[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<any>(null);
+  const [conversationMessages, setConversationMessages] = useState<any[]>([]);
+  const [loadingConversations, setLoadingConversations] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
 
   const generatePassword = () => {
     // Generate a secure random password (fallback if Cloud Function not available)
@@ -233,6 +242,50 @@ export default function UserDetails() {
     }
   };
 
+  const handleViewMessages = async () => {
+    if (!id) return;
+
+    setShowMessagesModal(true);
+    setLoadingConversations(true);
+
+    try {
+      // Get all conversations where user is a participant
+      const conversationsQuery = query(
+        collection(db, 'conversations'),
+        where('participants', 'array-contains', id),
+        orderBy('updatedAt', 'desc')
+      );
+      
+      const conversationsSnap = await getDocs(conversationsQuery);
+      const conversations = conversationsSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      setUserConversations(conversations);
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+      toast.error('Failed to load conversations');
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
+
+  const handleSelectConversation = async (conversation: any) => {
+    setSelectedConversation(conversation);
+    setLoadingMessages(true);
+
+    try {
+      const messages = await messageService.getConversationMessages(conversation.id);
+      setConversationMessages(messages);
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      toast.error('Failed to load messages');
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
   if (loading) {
     return (
       <>
@@ -291,6 +344,13 @@ export default function UserDetails() {
                 <p className="text-white/60">View and manage user account</p>
               </div>
               <div className="flex gap-3">
+                <button
+                  onClick={handleViewMessages}
+                  className="px-4 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 font-medium transition-all flex items-center gap-2"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  View Messages
+                </button>
                 {!user.suspended && !user.banned && (
                   <>
                     <button
@@ -753,6 +813,173 @@ export default function UserDetails() {
                 className="flex-1 px-4 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-all disabled:opacity-50"
               >
                 {actionLoading ? 'Banning...' : 'Ban User'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Messages Modal */}
+      {showMessagesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="backdrop-blur-xl bg-[#2f1632] border border-white/10 rounded-3xl p-8 max-w-6xl w-full max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                  <MessageSquare className="w-6 h-6 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">User Messages</h3>
+                  <p className="text-sm text-white/60">{user.displayName}'s conversations</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowMessagesModal(false);
+                  setUserConversations([]);
+                  setSelectedConversation(null);
+                  setConversationMessages([]);
+                }}
+                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 overflow-hidden">
+              {/* Conversations List */}
+              <div className="md:col-span-1 border-r border-white/10 pr-4 flex flex-col overflow-hidden">
+                <h4 className="text-sm font-semibold text-white/70 mb-3">
+                  Conversations ({userConversations.length})
+                </h4>
+                
+                {loadingConversations ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+                  </div>
+                ) : userConversations.length === 0 ? (
+                  <div className="text-center py-12">
+                    <MessageSquare className="w-10 h-10 text-white/40 mx-auto mb-2" />
+                    <p className="text-white/60 text-sm">No conversations</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 overflow-y-auto flex-1 pr-2">
+                    {userConversations.map((conv) => {
+                      const otherUserId = conv.participants.find((p: string) => p !== id);
+                      return (
+                        <button
+                          key={conv.id}
+                          onClick={() => handleSelectConversation(conv)}
+                          className={`w-full p-3 rounded-xl text-left transition-all ${
+                            selectedConversation?.id === conv.id
+                              ? 'bg-purple-500/20 border border-purple-500/30'
+                              : 'bg-white/5 hover:bg-white/10 border border-white/10'
+                          }`}
+                        >
+                          <p className="text-white font-medium text-sm truncate">
+                            {conv.participantNames?.[otherUserId] || 'Unknown User'}
+                          </p>
+                          <p className="text-white/60 text-xs truncate">
+                            {conv.lastMessage || 'No messages'}
+                          </p>
+                          <p className="text-white/40 text-xs mt-1">
+                            {conv.updatedAt?.toDate().toLocaleDateString()}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Messages Display */}
+              <div className="md:col-span-2 flex flex-col overflow-hidden">
+                {!selectedConversation ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                      <MessageSquare className="w-16 h-16 text-white/40 mx-auto mb-3" />
+                      <p className="text-white/60">Select a conversation to view messages</p>
+                    </div>
+                  </div>
+                ) : loadingMessages ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-3 pb-3 border-b border-white/10">
+                      <p className="text-white font-semibold">
+                        {conversationMessages.length} message{conversationMessages.length !== 1 ? 's' : ''}
+                      </p>
+                      <p className="text-white/60 text-sm">
+                        Conversation about: {selectedConversation.itemTitle}
+                      </p>
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                      {conversationMessages.length === 0 ? (
+                        <div className="text-center py-12">
+                          <p className="text-white/60">No messages in this conversation</p>
+                        </div>
+                      ) : (
+                        conversationMessages.map((message) => (
+                          <div
+                            key={message.id}
+                            className={`p-4 rounded-xl ${
+                              message.senderId === id
+                                ? 'bg-purple-500/10 border border-purple-500/30 ml-8'
+                                : 'bg-white/5 border border-white/10 mr-8'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center">
+                                  <User className="w-3 h-3 text-white/60" />
+                                </div>
+                                <div>
+                                  <p className="text-white font-medium text-sm">
+                                    {message.senderName || 'Unknown'}
+                                    {message.senderId === id && (
+                                      <span className="ml-2 text-xs text-purple-400">(This User)</span>
+                                    )}
+                                  </p>
+                                  <p className="text-white/40 text-xs">
+                                    {message.createdAt?.toDate().toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            <p className="text-white/80 text-sm whitespace-pre-wrap break-words">
+                              {message.content}
+                            </p>
+                            {message.imageUrl && (
+                              <div className="mt-3">
+                                <img
+                                  src={message.imageUrl}
+                                  alt="Message attachment"
+                                  className="max-w-xs rounded-lg border border-white/10"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-white/10">
+              <button
+                onClick={() => {
+                  setShowMessagesModal(false);
+                  setUserConversations([]);
+                  setSelectedConversation(null);
+                  setConversationMessages([]);
+                }}
+                className="w-full px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all"
+              >
+                Close
               </button>
             </div>
           </div>

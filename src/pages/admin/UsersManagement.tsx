@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, UserX, Ban, Mail, Calendar, Package, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Search, Filter, UserX, Ban, Mail, Calendar, Package, MessageSquare, AlertTriangle, UserPlus, Loader2 } from 'lucide-react';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { adminService } from '@/services/adminService';
+import { emailService } from '@/services/emailService';
 import { toast } from 'sonner';
 
 export default function UsersManagement() {
@@ -20,6 +21,21 @@ export default function UsersManagement() {
   const [suspendDuration, setSuspendDuration] = useState(7);
   const [banReason, setBanReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  
+  // Create user modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createUserData, setCreateUserData] = useState({
+    email: '',
+    displayName: '',
+    studentId: '',
+    department: '',
+    yearLevel: '',
+    phoneNumber: '',
+    role: 'user' as 'user' | 'admin'
+  });
+  const [adminRole, setAdminRole] = useState<'super_admin'>('super_admin');
+  const [createdPassword, setCreatedPassword] = useState('');
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -29,7 +45,32 @@ export default function UsersManagement() {
     setLoading(true);
     try {
       const data = await adminService.getAllUsers();
-      setUsers(data);
+      
+      // Fetch approved items count for each user
+      const usersWithStats = await Promise.all(
+        data.map(async (user) => {
+          try {
+            // Get only active/approved items for this user
+            const userItems = await adminService.getAllItems({ 
+              status: 'active'
+            });
+            const approvedItemsCount = userItems.filter(item => item.userId === user.uid).length;
+            
+            return {
+              ...user,
+              itemsPosted: approvedItemsCount
+            };
+          } catch (error) {
+            console.error('Error fetching items for user:', user.uid, error);
+            return {
+              ...user,
+              itemsPosted: 0
+            };
+          }
+        })
+      );
+      
+      setUsers(usersWithStats);
     } catch (error) {
       console.error('Error loading users:', error);
       toast.error('Failed to load users');
@@ -82,6 +123,80 @@ export default function UsersManagement() {
     }
   };
 
+  const handleCreateUser = async () => {
+    if (!adminProfile) {
+      toast.error('Admin profile not found');
+      return;
+    }
+
+    // Validate required fields
+    if (!createUserData.email || !createUserData.displayName) {
+      toast.error('Email and display name are required');
+      return;
+    }
+
+    // Validate email format
+    if (!createUserData.email.toLowerCase().endsWith('@lsb.edu.ph')) {
+      toast.error('Only @lsb.edu.ph email addresses are allowed');
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      // Create user account
+      const result = await adminService.createUserAccount(
+        adminProfile.uid,
+        createUserData,
+        createUserData.role === 'admin' ? adminRole : undefined
+      );
+
+      if (!result.success) {
+        toast.error(result.error || 'Failed to create user account');
+        setActionLoading(false);
+        return;
+      }
+
+      // Send credentials email
+      const emailResult = await emailService.sendAccountCredentials(
+        createUserData.email,
+        createUserData.displayName,
+        result.password!,
+        createUserData.role
+      );
+
+      if (emailResult.success) {
+        toast.success(`${createUserData.role === 'admin' ? 'Admin' : 'User'} account created and credentials emailed!`);
+        setCreatedPassword(result.password!);
+        setShowCreateModal(false);
+        setShowPasswordModal(true);
+        
+        // Reset form
+        setCreateUserData({
+          email: '',
+          displayName: '',
+          studentId: '',
+          department: '',
+          yearLevel: '',
+          phoneNumber: '',
+          role: 'user'
+        });
+        setAdminRole('super_admin');
+        
+        await loadUsers();
+      } else {
+        toast.warning('User created but email failed to send. Password: ' + result.password);
+        setCreatedPassword(result.password!);
+        setShowCreateModal(false);
+        setShowPasswordModal(true);
+      }
+    } catch (error) {
+      console.error('Error creating user:', error);
+      toast.error('Failed to create user account');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          user.email?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -114,13 +229,22 @@ export default function UsersManagement() {
       <main className="min-h-screen pt-6 lg:pt-12 pb-24 lg:pb-12 px-4 lg:px-6 lg:pl-80 lg:pr-12 bg-[#2f1632]">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl lg:text-4xl font-bold text-white mb-2">
-              Users Management
-            </h1>
-            <p className="text-white/60">
-              {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} found
-            </p>
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl lg:text-4xl font-bold text-white mb-2">
+                Users Management
+              </h1>
+              <p className="text-white/60">
+                {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} found
+              </p>
+            </div>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-[#ff7400] hover:bg-[#ff8500] text-white font-medium transition-all shadow-lg hover:shadow-xl"
+            >
+              <UserPlus className="w-5 h-5" />
+              Create User
+            </button>
           </div>
 
           {/* Filters */}
@@ -390,6 +514,253 @@ export default function UsersManagement() {
                 {actionLoading ? 'Banning...' : 'Ban User'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="backdrop-blur-xl bg-[#2f1632] border border-white/10 rounded-3xl p-8 max-w-2xl w-full my-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-[#ff7400]/20 flex items-center justify-center">
+                <UserPlus className="w-6 h-6 text-[#ff7400]" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">Create New User</h3>
+                <p className="text-sm text-white/60">Account details will be emailed to the user</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              {/* Role Selection */}
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                <label className="block text-white/70 text-sm mb-3">
+                  Account Type <span className="text-red-400">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCreateUserData({ ...createUserData, role: 'user' })}
+                    className={`p-4 rounded-xl border-2 transition-all ${
+                      createUserData.role === 'user'
+                        ? 'border-[#ff7400] bg-[#ff7400]/10'
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="text-center">
+                      <div className="text-2xl mb-2">👤</div>
+                      <div className="font-semibold text-white">Regular User</div>
+                      <div className="text-xs text-white/60 mt-1">Student/Faculty</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateUserData({ ...createUserData, role: 'admin' })}
+                    className={`p-4 rounded-xl border-2 transition-all ${
+                      createUserData.role === 'admin'
+                        ? 'border-[#ff7400] bg-[#ff7400]/10'
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="text-center">
+                      <div className="text-2xl mb-2">👑</div>
+                      <div className="font-semibold text-white">Admin</div>
+                      <div className="text-xs text-white/60 mt-1">System Administrator</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Admin Role Selection (only if admin is selected) */}
+              {createUserData.role === 'admin' && (
+                <div className="p-4 rounded-xl bg-[#ff7400]/10 border border-[#ff7400]/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="text-2xl">👑</div>
+                    <div>
+                      <p className="font-semibold text-white">Super Admin</p>
+                      <p className="text-xs text-white/60">Full system access and control</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-white/60 mt-2">
+                    🔓 Complete access to all features including user management, content moderation, system settings, and analytics
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-white/70 text-sm mb-2">
+                    Email <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={createUserData.email}
+                    onChange={(e) => setCreateUserData({ ...createUserData, email: e.target.value })}
+                    placeholder="student@lsb.edu.ph"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-[#ff7400]/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white/70 text-sm mb-2">
+                    Full Name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={createUserData.displayName}
+                    onChange={(e) => setCreateUserData({ ...createUserData, displayName: e.target.value })}
+                    placeholder="Juan Dela Cruz"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-[#ff7400]/50"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-white/70 text-sm mb-2">Student ID</label>
+                  <input
+                    type="text"
+                    value={createUserData.studentId}
+                    onChange={(e) => setCreateUserData({ ...createUserData, studentId: e.target.value })}
+                    placeholder="2024-12345"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-[#ff7400]/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white/70 text-sm mb-2">Department</label>
+                  <input
+                    type="text"
+                    value={createUserData.department}
+                    onChange={(e) => setCreateUserData({ ...createUserData, department: e.target.value })}
+                    placeholder="Computer Science"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-[#ff7400]/50"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-white/70 text-sm mb-2">Year Level</label>
+                  <select
+                    value={createUserData.yearLevel}
+                    onChange={(e) => setCreateUserData({ ...createUserData, yearLevel: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#ff7400]/50"
+                  >
+                    <option value="">Select Year</option>
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-white/70 text-sm mb-2">Phone Number</label>
+                  <input
+                    type="tel"
+                    value={createUserData.phoneNumber}
+                    onChange={(e) => setCreateUserData({ ...createUserData, phoneNumber: e.target.value })}
+                    placeholder="+63 912 345 6789"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-[#ff7400]/50"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-[#ff7400]/10 border border-[#ff7400]/20 mb-6">
+              <p className="text-sm text-[#ff7400]">
+                ℹ️ A temporary password will be generated and emailed to the user along with login instructions.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setCreateUserData({
+                    email: '',
+                    displayName: '',
+                    studentId: '',
+                    department: '',
+                    yearLevel: '',
+                    phoneNumber: '',
+                    role: 'user'
+                  });
+                  setAdminRole('super_admin');
+                }}
+                disabled={actionLoading}
+                className="flex-1 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateUser}
+                disabled={actionLoading || !createUserData.email || !createUserData.displayName}
+                className="flex-1 px-4 py-3 rounded-xl bg-[#ff7400] hover:bg-[#ff8500] text-white font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {actionLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create & Email'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Display Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="backdrop-blur-xl bg-[#2f1632] border border-white/10 rounded-3xl p-8 max-w-md w-full">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                <Mail className="w-6 h-6 text-green-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">Account Created!</h3>
+                <p className="text-sm text-white/60">Credentials have been emailed</p>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-xl bg-white/5 border border-white/10 mb-6">
+              <p className="text-sm text-white/60 mb-3">Temporary Password:</p>
+              <div className="flex items-center justify-between p-4 rounded-lg bg-[#ff7400]/10 border border-[#ff7400]/30">
+                <span className="text-2xl font-mono font-bold text-[#ff7400] tracking-wider">
+                  {createdPassword}
+                </span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(createdPassword);
+                    toast.success('Password copied to clipboard');
+                  }}
+                  className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm transition-all"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 mb-6">
+              <p className="text-sm text-green-200">
+                ✅ The user will receive an email with their login credentials and instructions.
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowPasswordModal(false);
+                setCreatedPassword('');
+              }}
+              className="w-full px-4 py-3 rounded-xl bg-[#ff7400] hover:bg-[#ff8500] text-white font-medium transition-all"
+            >
+              Done
+            </button>
           </div>
         </div>
       )}

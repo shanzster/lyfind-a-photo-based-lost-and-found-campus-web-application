@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Upload, Image as ImageIcon, Loader2, CheckCircle, XCircle, Clock, TrendingUp, AlertCircle } from 'lucide-react';
+import { Upload, Image as ImageIcon, Loader2, CheckCircle, XCircle, Clock, TrendingUp, AlertCircle, History } from 'lucide-react';
 import LyceanSidebar from '@/components/lycean-sidebar';
 import { photoMatchService, PhotoMatchRequest } from '@/services/photoMatchService';
+import { aiMatchingService, AIMatchResult } from '@/services/aiMatchingService';
 import { useAuth } from '@/contexts/AuthContext';
 import { onSnapshot, collection, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -11,6 +12,8 @@ export default function PhotoMatchPage() {
   const { user } = useAuth();
   const [queue, setQueue] = useState<PhotoMatchRequest[]>([]);
   const [completedRequests, setCompletedRequests] = useState<PhotoMatchRequest[]>([]);
+  const [matchHistory, setMatchHistory] = useState<AIMatchResult[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
@@ -24,6 +27,42 @@ export default function PhotoMatchPage() {
   // Debug: Log user state
   useEffect(() => {
     console.log('[PhotoMatch] User state:', user ? { uid: user.uid, email: user.email } : 'Not logged in');
+  }, [user]);
+
+  // Load match history
+  useEffect(() => {
+    if (!user) return;
+
+    const loadHistory = async () => {
+      try {
+        const q = query(
+          collection(db, 'aiMatches'),
+          where('matchedBy', '==', user.uid)
+        );
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          const history = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          } as AIMatchResult));
+          
+          // Sort by createdAt descending
+          history.sort((a, b) => {
+            const aTime = a.createdAt?.toMillis() || 0;
+            const bTime = b.createdAt?.toMillis() || 0;
+            return bTime - aTime;
+          });
+          
+          setMatchHistory(history);
+        });
+
+        return () => unsubscribe();
+      } catch (error) {
+        console.error('[PhotoMatch] Failed to load history:', error);
+      }
+    };
+
+    loadHistory();
   }, [user]);
 
   // Check usage limit
@@ -334,107 +373,12 @@ export default function PhotoMatchPage() {
     );
   }
 
-  // Show full-page limit overlay if daily limit is reached
-  if (usageCount >= 2) {
-    return (
-      <>
-        <LyceanSidebar />
-        <main className="min-h-screen pt-6 lg:pt-12 pb-24 lg:pb-12 px-4 lg:px-6 lg:pl-80 lg:pr-12 flex items-center justify-center">
-          <div className="max-w-md w-full">
-            <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-8 text-center">
-              {/* Spinning Logo */}
-              <div className="mb-6 flex justify-center">
-                <div className="w-24 h-24 animate-spin">
-                  <img 
-                    src="/Untitled design (3).png" 
-                    alt="LyFind Logo" 
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-              </div>
 
-              {/* Title */}
-              <h2 className="text-2xl font-bold text-white mb-3">Daily Limit Reached</h2>
-              
-              {/* Message */}
-              <p className="text-white/70 mb-6">
-                Wait for 12 hours to use photo matching again
-              </p>
-
-              {/* Timer */}
-              {remainingTime && (
-                <div className="mb-6 p-8 rounded-2xl bg-[#ff7400]/10 border border-[#ff7400]/30">
-                  <div className="text-5xl font-bold text-[#ff7400] font-mono tracking-wider">
-                    {remainingTime}
-                  </div>
-                </div>
-              )}
-
-              {/* Info */}
-              <p className="text-sm text-white/50 mb-6">
-                You've used all 2 photo matches for today. The cooldown resets 12 hours after your first use.
-              </p>
-
-              {/* Back Button */}
-              <Link 
-                to="/browse"
-                className="w-full inline-block px-6 py-3 rounded-xl bg-[#ff7400] hover:bg-[#ff7400]/90 text-white font-semibold transition-colors"
-              >
-                Go to Browse
-              </Link>
-            </div>
-          </div>
-        </main>
-      </>
-    );
-  }
 
   return (
     <>
       <LyceanSidebar />
       
-      {/* Daily Limit Reached - Full Page Overlay */}
-      {usageCount >= 2 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-lg">
-          <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-8 max-w-md w-full shadow-2xl">
-            <div className="flex flex-col items-center text-center">
-              {/* Spinning Logo */}
-              <div className="w-24 h-24 mb-6 animate-spin">
-                <img 
-                  src="/Untitled design (3).png" 
-                  alt="LyFind Logo" 
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              
-              {/* Title */}
-              <h2 className="text-2xl font-bold text-white mb-3">Daily Limit Reached</h2>
-              
-              {/* Message */}
-              <p className="text-white/70 mb-6 leading-relaxed">
-                You've used all 2 photo matches for today. Please wait for the cooldown period to reset.
-              </p>
-              
-              {/* Countdown Timer */}
-              <div className="w-full rounded-2xl bg-gradient-to-br from-[#ff7400]/20 to-[#ff7400]/5 border border-[#ff7400]/30 p-8 mb-6">
-                <p className="text-sm text-white/80 mb-3 font-medium">Wait for 12 hours</p>
-                <div className="text-4xl font-bold text-[#ff7400] font-mono tracking-wider">
-                  {remainingTime || 'Calculating...'}
-                </div>
-              </div>
-              
-              {/* Back Button */}
-              <Link
-                to="/browse"
-                className="w-full px-6 py-3 rounded-xl bg-[#ff7400] hover:bg-[#ff7400]/90 text-white font-semibold transition-colors text-center"
-              >
-                Back to Browse
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Error Modal */}
       {showErrorModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -520,21 +464,36 @@ export default function PhotoMatchPage() {
                 <h1 className="text-3xl lg:text-5xl font-medium text-white mb-3 lg:mb-4">Photo Matcher</h1>
                 <p className="text-white/60 text-base lg:text-lg">Upload a photo to find similar items instantly</p>
               </div>
-              {/* Usage Indicator */}
-              <div className="hidden lg:flex items-center gap-3 px-4 py-2 rounded-xl bg-white/5 border border-white/10">
-                <div className="flex gap-1">
-                  {[0, 1].map((i) => (
-                    <div 
-                      key={i}
-                      className={`w-3 h-3 rounded-full ${
-                        i < usageCount ? 'bg-[#ff7400]' : 'bg-white/20'
-                      }`}
-                    />
-                  ))}
+              <div className="flex items-center gap-3">
+                {/* History Button */}
+                <button
+                  onClick={() => setShowHistory(true)}
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium transition-all flex items-center gap-2"
+                >
+                  <History className="w-4 h-4" />
+                  <span className="hidden lg:inline">History</span>
+                  {matchHistory.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-[#ff7400] text-white text-xs">
+                      {matchHistory.length}
+                    </span>
+                  )}
+                </button>
+                {/* Usage Indicator */}
+                <div className="hidden lg:flex items-center gap-3 px-4 py-2 rounded-xl bg-white/5 border border-white/10">
+                  <div className="flex gap-1">
+                    {[0, 1].map((i) => (
+                      <div 
+                        key={i}
+                        className={`w-3 h-3 rounded-full ${
+                          i < usageCount ? 'bg-[#ff7400]' : 'bg-white/20'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-sm text-white/70">
+                    {2 - usageCount} uses left today
+                  </span>
                 </div>
-                <span className="text-sm text-white/70">
-                  {2 - usageCount} uses left today
-                </span>
               </div>
             </div>
           </div>
@@ -555,7 +514,43 @@ export default function PhotoMatchPage() {
                 </div>
               </div>
               
-              {!previewUrl ? (
+              {usageCount >= 2 ? (
+                // Daily Limit Reached - Show Timer
+                <div className="text-center py-8">
+                  <div className="mb-6 flex justify-center">
+                    <div className="w-20 h-20 animate-spin">
+                      <img 
+                        src="/Untitled design (3).png" 
+                        alt="LyFind Logo" 
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  </div>
+
+                  <h3 className="text-xl font-bold text-white mb-2">Daily Limit Reached</h3>
+                  <p className="text-white/60 text-sm mb-6">
+                    Wait for 12 hours to use photo matching again
+                  </p>
+
+                  {remainingTime && (
+                    <div className="mb-6 p-6 rounded-2xl bg-[#ff7400]/10 border border-[#ff7400]/30">
+                      <div className="text-4xl font-bold text-[#ff7400] font-mono tracking-wider">
+                        {remainingTime}
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-white/50 mb-4">
+                    You've used all 2 photo matches for today. The cooldown resets 12 hours after your first use.
+                  </p>
+
+                  <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20">
+                    <p className="text-sm text-white/80">
+                      💡 You can still view your match history and browse the queue while waiting
+                    </p>
+                  </div>
+                </div>
+              ) : !previewUrl ? (
                 <label className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/20 p-12 cursor-pointer hover:border-[#ff7400]/50 transition-all bg-white/5 hover:bg-white/10">
                   <div className="w-16 h-16 rounded-full bg-[#ff7400]/20 flex items-center justify-center mb-4">
                     <ImageIcon className="h-8 w-8 text-[#ff7400]" />
@@ -583,18 +578,13 @@ export default function PhotoMatchPage() {
 
                   <button
                     onClick={handleUpload}
-                    disabled={isUploading || usageCount >= 2}
+                    disabled={isUploading}
                     className="w-full px-6 py-4 rounded-2xl bg-gradient-to-r from-[#ff7400] to-[#ff7400]/80 hover:shadow-lg hover:shadow-[#ff7400]/30 text-white font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isUploading ? (
                       <>
                         <Loader2 className="h-5 w-5 animate-spin" />
                         Adding to Queue...
-                      </>
-                    ) : usageCount >= 2 ? (
-                      <>
-                        <Clock className="h-5 w-5" />
-                        Daily Limit Reached
                       </>
                     ) : (
                       <>
@@ -606,11 +596,13 @@ export default function PhotoMatchPage() {
                 </div>
               )}
 
-              <div className="mt-6 p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20">
-                <p className="text-sm text-white/80 leading-relaxed">
-                  <strong className="text-white">How it works:</strong> Upload a photo of your lost or found item, and we'll search through all posted items to find the best matches based on visual similarity. Results typically ready in under 10 seconds!
-                </p>
-              </div>
+              {usageCount < 2 && (
+                <div className="mt-6 p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20">
+                  <p className="text-sm text-white/80 leading-relaxed">
+                    <strong className="text-white">How it works:</strong> Upload a photo of your lost or found item, and we'll search through all posted items to find the best matches based on visual similarity. Results typically ready in under 10 seconds!
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-6">
@@ -811,6 +803,92 @@ export default function PhotoMatchPage() {
           )}
         </div>
       </main>
+
+      {/* History Modal */}
+      {showHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="backdrop-blur-xl bg-[#2f1632] border border-white/10 rounded-3xl p-8 max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                  <History className="w-6 h-6 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-white">Match History</h3>
+                  <p className="text-white/60 text-sm">Your photo matching history</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowHistory(false)}
+                className="w-10 h-10 rounded-xl hover:bg-white/10 flex items-center justify-center transition-all"
+              >
+                <XCircle className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            {matchHistory.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
+                  <History className="h-8 w-8 text-white/40" />
+                </div>
+                <p className="text-white/60 mb-1">No match history yet</p>
+                <p className="text-sm text-white/40">Your photo match results will appear here</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {matchHistory.map((match) => (
+                  <div key={match.id} className="rounded-2xl border border-white/10 bg-white/5 p-6 hover:bg-white/10 transition-all">
+                    <div className="flex items-start gap-4">
+                      <div className="flex gap-3">
+                        <img 
+                          src={match.queryImageUrl} 
+                          alt="Query" 
+                          className="w-24 h-24 rounded-xl object-cover border border-white/10"
+                        />
+                        <div className="text-white/40 flex items-center text-2xl">→</div>
+                        <img 
+                          src={match.matchedImageUrl} 
+                          alt="Match" 
+                          className="w-24 h-24 rounded-xl object-cover border border-white/10"
+                        />
+                      </div>
+                      
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className={`px-3 py-1 rounded-lg text-sm font-medium ${
+                            match.similarityScore >= 90 ? 'bg-green-500/20 text-green-400' :
+                            match.similarityScore >= 75 ? 'bg-yellow-500/20 text-yellow-400' :
+                            'bg-orange-500/20 text-orange-400'
+                          }`}>
+                            {match.similarityScore}% Match
+                          </span>
+                          <span className={`px-3 py-1 rounded-lg text-xs font-medium ${
+                            match.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                            match.status === 'confirmed' ? 'bg-green-500/20 text-green-400' :
+                            'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {match.status.charAt(0).toUpperCase() + match.status.slice(1)}
+                          </span>
+                        </div>
+                        <h4 className="text-white font-semibold mb-1">{match.matchedItemTitle}</h4>
+                        <p className="text-white/50 text-sm mb-3">
+                          {match.createdAt?.toDate().toLocaleString()}
+                        </p>
+                        <Link
+                          to={`/item/${match.matchedItemId}`}
+                          className="inline-block px-4 py-2 rounded-lg bg-[#ff7400] hover:bg-[#ff7400]/90 text-white text-sm font-medium transition-all"
+                        >
+                          View Item
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
     </>
   );

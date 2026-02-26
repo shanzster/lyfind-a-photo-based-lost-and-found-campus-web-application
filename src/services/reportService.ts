@@ -14,13 +14,18 @@ import { db } from '@/lib/firebase';
 
 export interface Report {
   id?: string;
-  itemId: string;
-  itemTitle: string;
+  itemId?: string;
+  itemTitle?: string;
+  messageId?: string;
+  messageContent?: string;
+  conversationId?: string;
   reportedBy: string;
   reporterName: string;
   reporterEmail: string;
+  reportedUserId?: string;
+  reportedUserName?: string;
   reason: string;
-  category: 'inappropriate' | 'spam' | 'fraud' | 'duplicate' | 'other';
+  category: 'inappropriate' | 'spam' | 'fraud' | 'duplicate' | 'harassment' | 'other';
   description: string;
   status: 'pending' | 'reviewed' | 'resolved' | 'dismissed';
   createdAt: Timestamp;
@@ -34,11 +39,28 @@ export const reportService = {
   // Create a new report
   async createReport(reportData: Omit<Report, 'id' | 'createdAt' | 'status'>): Promise<string> {
     try {
-      const docRef = await addDoc(collection(db, 'reports'), {
-        ...reportData,
+      // Clean the data - remove undefined values
+      const cleanData: any = {
+        reportedBy: reportData.reportedBy,
+        reporterName: reportData.reporterName,
+        reporterEmail: reportData.reporterEmail,
+        reason: reportData.reason,
+        category: reportData.category,
+        description: reportData.description,
         status: 'pending',
         createdAt: Timestamp.now()
-      });
+      };
+
+      // Only add optional fields if they exist
+      if (reportData.itemId) cleanData.itemId = reportData.itemId;
+      if (reportData.itemTitle) cleanData.itemTitle = reportData.itemTitle;
+      if (reportData.messageId) cleanData.messageId = reportData.messageId;
+      if (reportData.messageContent) cleanData.messageContent = reportData.messageContent;
+      if (reportData.conversationId) cleanData.conversationId = reportData.conversationId;
+      if (reportData.reportedUserId) cleanData.reportedUserId = reportData.reportedUserId;
+      if (reportData.reportedUserName) cleanData.reportedUserName = reportData.reportedUserName;
+
+      const docRef = await addDoc(collection(db, 'reports'), cleanData);
       
       console.log('[ReportService] Report created:', docRef.id);
       return docRef.id;
@@ -54,12 +76,15 @@ export const reportService = {
     limit?: number;
   }): Promise<Report[]> {
     try {
+      console.log('[ReportService] Getting reports with filters:', filters);
+      
       let q = query(
         collection(db, 'reports'),
         orderBy('createdAt', 'desc')
       );
 
       if (filters?.status && filters.status !== 'all') {
+        console.log('[ReportService] Filtering by status:', filters.status);
         q = query(
           collection(db, 'reports'),
           where('status', '==', filters.status),
@@ -68,10 +93,18 @@ export const reportService = {
       }
 
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Report));
+      console.log('[ReportService] Found', snapshot.docs.length, 'reports');
+      
+      const reports = snapshot.docs.map(doc => {
+        const data = doc.data();
+        console.log('[ReportService] Report:', doc.id, data);
+        return {
+          id: doc.id,
+          ...data
+        } as Report;
+      });
+      
+      return reports;
     } catch (error) {
       console.error('[ReportService] Error getting reports:', error);
       return [];

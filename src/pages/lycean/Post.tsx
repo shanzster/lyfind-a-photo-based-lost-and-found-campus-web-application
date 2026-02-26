@@ -13,7 +13,7 @@ import { autoMatchNewItem } from '@/services/autoMatchService'
 const categories = ['Bags', 'Electronics', 'Jewelry', 'Accessories', 'Keys', 'Clothing', 'Books', 'Other']
 
 export default function PostPage() {
-  const { user, userProfile } = useAuth()
+  const { user, userProfile, loading } = useAuth()
   const navigate = useNavigate()
   const [itemType, setItemType] = useState<'lost' | 'found'>('lost')
   const [title, setTitle] = useState('')
@@ -108,8 +108,9 @@ export default function PostPage() {
   }
 
   const confirmPost = async () => {
-    if (!user || !userProfile) {
+    if (!user) {
       toast.error('You must be logged in to post items')
+      navigate('/login')
       return
     }
     
@@ -128,11 +129,10 @@ export default function PostPage() {
       console.log('[Post] User photo URL:', userProfile.photoURL || user.photoURL)
       toast.info('Creating item post...')
       
-      const itemData = {
+      const itemData: any = {
         type: itemType,
         title: title.trim(),
         description: blindDescription.trim(), // Public blind description
-        detailedDescription: detailedDescription.trim() || undefined, // Private detailed description
         category,
         location: {
           lat: 0, // Not using lat/lng anymore
@@ -145,9 +145,8 @@ export default function PostPage() {
         roomNumber: floorPlanLocation.roomNumber,
         photos: photoUrls,
         userId: user.uid,
-        userName: userProfile.displayName || user.displayName || 'Anonymous',
+        userName: userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Anonymous',
         userEmail: user.email!,
-        userPhotoURL: userProfile.photoURL || user.photoURL || undefined,
         status: 'pending_approval' as const, // Changed to pending_approval
         approval: {
           status: 'pending_approval',
@@ -157,6 +156,17 @@ export default function PostPage() {
           autoApproved: false
         }
       };
+
+      // Only add optional fields if they have values
+      const photoURL = userProfile?.photoURL || user.photoURL;
+      if (photoURL) {
+        itemData.userPhotoURL = photoURL;
+      }
+
+      const detailedDesc = detailedDescription.trim();
+      if (detailedDesc) {
+        itemData.detailedDescription = detailedDesc;
+      }
       
       const itemId = await itemService.createItem(itemData);
       console.log('[Post] Item created with ID:', itemId)

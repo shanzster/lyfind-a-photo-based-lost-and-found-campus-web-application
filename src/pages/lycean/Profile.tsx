@@ -6,6 +6,7 @@ import { ArrowLeft, LogOut, Sparkles, Package, MessageSquare, User, Loader2, Edi
 import { useAuth } from '@/contexts/AuthContext';
 import { itemService } from '@/services/itemService';
 import { userService } from '@/services/userService';
+import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 import { toast } from 'sonner';
 
 export default function ProfilePage() {
@@ -254,6 +255,12 @@ export default function ProfilePage() {
             </Button>
           </div>
         </Card>
+
+        {/* Push Notifications */}
+        <div className="mt-6">
+          <h2 className="text-xl font-bold text-foreground mb-4">Notification Settings</h2>
+          <PushNotificationPrompt compact />
+        </div>
       </div>
     </div>
   );

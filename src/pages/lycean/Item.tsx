@@ -6,6 +6,7 @@ import { itemService, Item } from '@/services/itemService'
 import { userService } from '@/services/userService'
 import { messageService } from '@/services/messageService'
 import { useAuth } from '@/contexts/AuthContext'
+import { getFloorPlan } from '@/lib/floorPlans'
 import { toast } from 'sonner'
 
 // Helper function to format timestamp
@@ -220,14 +221,50 @@ export default function ItemPage() {
                   <MapPin className="w-5 h-5 text-[#ff7400]" />
                   Location
                 </h3>
-                <div className="aspect-video rounded-xl lg:rounded-2xl overflow-hidden bg-gradient-to-br from-[#2f1632] to-[#1a0d1c] flex items-center justify-center">
-                  <div className="text-center">
-                    <MapPin className="w-12 h-12 text-[#ff7400] mx-auto mb-3" />
-                    <p className="text-white font-medium text-lg">{item.location.address || 'Campus Location'}</p>
-                    <p className="text-white/50 text-sm mt-2">
-                      Lat: {item.location.lat.toFixed(4)}, Lng: {item.location.lng.toFixed(4)}
-                    </p>
-                  </div>
+                <div className="aspect-video rounded-xl lg:rounded-2xl overflow-hidden bg-gradient-to-br from-[#2f1632] to-[#1a0d1c] relative">
+                  {item.floorPlanId && item.locationX !== undefined && item.locationY !== undefined ? (
+                    // Show floor plan with pinned location
+                    <>
+                      <img
+                        src={getFloorPlan(item.floorPlanId)?.imageUrl || '/floor-plans/ground_floor.png'}
+                        alt="Floor Plan"
+                        className="w-full h-full object-contain"
+                      />
+                      
+                      {/* Pinned Location Marker */}
+                      <div
+                        className="absolute transform -translate-x-1/2 -translate-y-1/2 z-20 animate-bounce"
+                        style={{
+                          left: `${item.locationX}%`,
+                          top: `${item.locationY}%`,
+                        }}
+                      >
+                        <div className="relative">
+                          {/* Pulsing ring */}
+                          <div className="absolute inset-0 rounded-full bg-[#ff7400] animate-ping opacity-75"></div>
+                          {/* Main marker */}
+                          <div className="relative w-10 h-10 rounded-full bg-[#ff7400] border-4 border-white shadow-2xl flex items-center justify-center">
+                            <MapPin className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Room label overlay */}
+                      {item.roomNumber && (
+                        <div className="absolute bottom-4 left-4 right-4 backdrop-blur-xl bg-white/10 border border-white/20 rounded-xl p-3">
+                          <p className="text-white font-medium text-sm">{item.roomNumber}</p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    // Fallback if no floor plan location
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <MapPin className="w-12 h-12 text-[#ff7400] mx-auto mb-3" />
+                        <p className="text-white font-medium text-lg">{item.location.address || 'Campus Location'}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

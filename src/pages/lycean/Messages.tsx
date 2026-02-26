@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Send, ArrowLeft, Loader2, MessageCircle, Package } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Send, ArrowLeft, Loader2, MessageCircle, Package, Flag, X, AlertTriangle } from 'lucide-react';
 import LyceanSidebar from '@/components/lycean-sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { messageService, Conversation, Message } from '@/services/messageService';
+import { reportService } from '@/services/reportService';
 import { toast } from 'sonner';
 
 export default function MessagesPage() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const location = useLocation();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
@@ -17,6 +18,10 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportCategory, setReportCategory] = useState<'inappropriate' | 'spam' | 'fraud' | 'harassment' | 'other'>('harassment');
+  const [reportDescription, setReportDescription] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
 
   // Get conversation ID from navigation state
   const targetConversationId = (location.state as any)?.conversationId;
@@ -92,6 +97,59 @@ export default function MessagesPage() {
       toast.error('Failed to send message');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleReportConversation = async () => {
+    if (!user || !userProfile || !selectedConversation) {
+      toast.error('Please log in to report')
+      return
+    }
+
+    if (!reportDescription.trim()) {
+      toast.error('Please provide a description')
+      return
+    }
+
+    setSubmittingReport(true)
+
+    try {
+      const otherUser = getOtherParticipant(selectedConversation);
+      
+      const reportData: any = {
+        reportedBy: user.uid,
+        reporterName: userProfile.displayName || user.displayName || 'User',
+        reporterEmail: user.email!,
+        reason: reportCategory,
+        category: reportCategory,
+        description: reportDescription.trim()
+      };
+
+      // Add optional fields only if they exist
+      if (selectedConversation.id) {
+        reportData.conversationId = selectedConversation.id;
+      }
+      if (selectedConversation.itemTitle) {
+        reportData.messageContent = `Conversation about: ${selectedConversation.itemTitle}`;
+      }
+      if (otherUser.id) {
+        reportData.reportedUserId = otherUser.id;
+      }
+      if (otherUser.name) {
+        reportData.reportedUserName = otherUser.name;
+      }
+      
+      await reportService.createReport(reportData);
+
+      toast.success('Report submitted successfully')
+      setShowReportModal(false)
+      setReportCategory('harassment')
+      setReportDescription('')
+    } catch (error) {
+      console.error('Error submitting report:', error)
+      toast.error('Failed to submit report')
+    } finally {
+      setSubmittingReport(false)
     }
   };
 
@@ -259,6 +317,14 @@ export default function MessagesPage() {
                         Inquiring about item
                       </p>
                     </div>
+
+                    <button
+                      onClick={() => setShowReportModal(true)}
+                      className="p-2 rounded-lg bg-white/5 hover:bg-red-500/20 text-white/60 hover:text-red-400 transition-all"
+                      title="Report conversation"
+                    >
+                      <Flag className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
 
@@ -374,6 +440,150 @@ export default function MessagesPage() {
           </div>
         </div>
       </main>
+
+      {/* Report Modal */}
+      {showReportModal && selectedConversation && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="backdrop-blur-xl bg-[#2f1632] border border-white/10 rounded-3xl max-w-lg w-full shadow-2xl my-8 max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 lg:p-8 border-b border-white/10 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center">
+                  <Flag className="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl lg:text-2xl font-medium text-white">Report Conversation</h3>
+                  <p className="text-white/60 text-sm">Report inappropriate behavior</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowReportModal(false)
+                  setReportCategory('harassment')
+                  setReportDescription('')
+                }}
+                disabled={submittingReport}
+                className="w-10 h-10 rounded-full backdrop-blur-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all disabled:opacity-50"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            {/* Content - Scrollable */}
+            <div className="p-6 lg:p-8 space-y-6 overflow-y-auto flex-1">
+              {/* Conversation Preview */}
+              <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/10">
+                <img
+                  src={selectedConversation.itemImage}
+                  alt={selectedConversation.itemTitle}
+                  className="w-16 h-16 rounded-xl object-cover"
+                />
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-white font-medium truncate">{selectedConversation.itemTitle}</h4>
+                  <p className="text-white/50 text-sm truncate">
+                    With: {getOtherParticipant(selectedConversation).name}
+                  </p>
+                </div>
+              </div>
+
+              {/* Warning */}
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+                <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                <p className="text-yellow-200/90 text-sm">
+                  False reports may result in account suspension. Please only report genuine violations.
+                </p>
+              </div>
+
+              {/* Category Selection */}
+              <div>
+                <label className="block text-white/70 text-sm mb-3 font-medium">
+                  Reason for Report
+                </label>
+                <div className="space-y-2">
+                  {[
+                    { value: 'harassment', label: 'Harassment', desc: 'Threatening or abusive messages' },
+                    { value: 'spam', label: 'Spam', desc: 'Unwanted or repetitive messages' },
+                    { value: 'fraud', label: 'Scam/Fraud', desc: 'Attempting to scam or defraud' },
+                    { value: 'inappropriate', label: 'Inappropriate Content', desc: 'Offensive or explicit content' },
+                    { value: 'other', label: 'Other', desc: 'Something else' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setReportCategory(option.value as any)}
+                      disabled={submittingReport}
+                      className={`w-full p-4 rounded-xl text-left transition-all ${
+                        reportCategory === option.value
+                          ? 'bg-red-500/20 border-2 border-red-500'
+                          : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                      } disabled:opacity-50`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white font-medium text-sm">{option.label}</p>
+                          <p className="text-white/50 text-xs">{option.desc}</p>
+                        </div>
+                        {reportCategory === option.value && (
+                          <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center">
+                            <div className="w-2 h-2 rounded-full bg-white"></div>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-white/70 text-sm mb-2 font-medium">
+                  Additional Details
+                </label>
+                <textarea
+                  value={reportDescription}
+                  onChange={(e) => setReportDescription(e.target.value)}
+                  placeholder="Please provide more details about the issue..."
+                  disabled={submittingReport}
+                  rows={4}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-red-500/50 transition-all resize-none disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 p-6 lg:p-8 border-t border-white/10 flex-shrink-0">
+              <button
+                onClick={() => {
+                  setShowReportModal(false)
+                  setReportCategory('harassment')
+                  setReportDescription('')
+                }}
+                disabled={submittingReport}
+                className="flex-1 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReportConversation}
+                disabled={submittingReport || !reportDescription.trim()}
+                className="flex-1 px-6 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {submittingReport ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Flag className="w-4 h-4" />
+                    Submit Report
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

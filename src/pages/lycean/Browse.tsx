@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { Search, MapPin, Eye, Mail, Clock, TrendingUp, X, Navigation, Loader2, Image as ImageIcon } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Search, MapPin, Eye, Mail, Clock, TrendingUp, X, Navigation, Loader2, Image as ImageIcon, Flag, AlertTriangle } from 'lucide-react'
 import LyceanSidebar from '@/components/lycean-sidebar'
 import { itemService, Item } from '@/services/itemService'
 import { userService } from '@/services/userService'
 import { useAuth } from '@/contexts/AuthContext'
+import { messageService } from '@/services/messageService'
+import { reportService } from '@/services/reportService'
+import { getFloorPlan } from '@/lib/floorPlans'
 import { toast } from 'sonner'
 
 const categories = ['All', 'Bags', 'Electronics', 'Jewelry', 'Accessories', 'Keys', 'Clothing', 'Books', 'Other']
@@ -27,7 +30,8 @@ const formatTimestamp = (timestamp: any) => {
 }
 
 export default function BrowsePage() {
-  const { user } = useAuth()
+  const { user, userProfile } = useAuth()
+  const navigate = useNavigate()
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState('All')
@@ -35,6 +39,12 @@ export default function BrowsePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showMapModal, setShowMapModal] = useState(false)
   const [selectedItemForMap, setSelectedItemForMap] = useState<Item | null>(null)
+  const [messagingItemId, setMessagingItemId] = useState<string | null>(null)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [selectedItemForReport, setSelectedItemForReport] = useState<Item | null>(null)
+  const [reportCategory, setReportCategory] = useState<'inappropriate' | 'spam' | 'fraud' | 'duplicate' | 'other'>('spam')
+  const [reportDescription, setReportDescription] = useState('')
+  const [submittingReport, setSubmittingReport] = useState(false)
 
   // Fetch items from Firestore
   useEffect(() => {
@@ -105,6 +115,94 @@ export default function BrowsePage() {
   const handleShowMap = (item: Item) => {
     setSelectedItemForMap(item)
     setShowMapModal(true)
+  }
+
+  const handleMessageOwner = async (item: Item) => {
+    if (!user || !userProfile) {
+      toast.error('Please log in to send messages')
+      navigate('/login')
+      return
+    }
+
+    if (item.userId === user.uid) {
+      toast.error('You cannot message yourself')
+      return
+    }
+
+    setMessagingItemId(item.id!)
+    
+    try {
+      // Create or get conversation
+      const conversationId = await messageService.createConversation(
+        item.id!,
+        item.title,
+        item.photos?.[0] || '',
+        item.type,
+        item.userId,
+        item.userName,
+        user.uid,
+        userProfile.displayName || user.displayName || 'User',
+        userProfile.photoURL || user.photoURL,
+        item.userPhotoURL
+      )
+
+      // Navigate to messages with the conversation ID
+      navigate('/messages', { state: { conversationId } })
+    } catch (error) {
+      console.error('Error creating conversation:', error)
+      toast.error('Failed to start conversation')
+    } finally {
+      setMessagingItemId(null)
+    }
+  }
+
+  const handleReportItem = async () => {
+    if (!user || !userProfile) {
+      toast.error('Please log in to report items')
+      return
+    }
+
+    if (!selectedItemForReport) return
+
+    if (!reportDescription.trim()) {
+      toast.error('Please provide a description')
+      return
+    }
+
+    setSubmittingReport(true)
+
+    try {
+      // Check if user already reported this item
+      const hasReported = await reportService.hasUserReported(selectedItemForReport.id!, user.uid)
+      
+      if (hasReported) {
+        toast.error('You have already reported this item')
+        setShowReportModal(false)
+        return
+      }
+
+      await reportService.createReport({
+        itemId: selectedItemForReport.id!,
+        itemTitle: selectedItemForReport.title,
+        reportedBy: user.uid,
+        reporterName: userProfile.displayName || user.displayName || 'User',
+        reporterEmail: user.email!,
+        reason: reportCategory,
+        category: reportCategory,
+        description: reportDescription.trim()
+      })
+
+      toast.success('Report submitted successfully')
+      setShowReportModal(false)
+      setSelectedItemForReport(null)
+      setReportCategory('spam')
+      setReportDescription('')
+    } catch (error) {
+      console.error('Error submitting report:', error)
+      toast.error('Failed to submit report')
+    } finally {
+      setSubmittingReport(false)
+    }
   }
 
   // Loading state
@@ -308,8 +406,27 @@ export default function BrowsePage() {
                           <MapPin className="w-3 lg:w-4 h-3 lg:h-4 text-white/60 group-hover/btn:text-white" />
                         </button>
                         
-                        <button className="w-7 lg:w-10 h-7 lg:h-10 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 flex items-center justify-center hover:bg-[#ff7400] hover:border-[#ff7400] hover:scale-110 transition-all group/btn relative">
-                          <Mail className="w-3 lg:w-4 h-3 lg:h-4 text-white/60 group-hover/btn:text-white" />
+                        <button 
+                          onClick={() => handleMessageOwner(item)}
+                          disabled={messagingItemId === item.id || item.userId === user?.uid}
+                          className="w-7 lg:w-10 h-7 lg:h-10 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 flex items-center justify-center hover:bg-[#ff7400] hover:border-[#ff7400] hover:scale-110 transition-all group/btn relative disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {messagingItemId === item.id ? (
+                            <Loader2 className="w-3 lg:w-4 h-3 lg:h-4 text-white/60 animate-spin" />
+                          ) : (
+                            <Mail className="w-3 lg:w-4 h-3 lg:h-4 text-white/60 group-hover/btn:text-white" />
+                          )}
+                        </button>
+
+                        <button 
+                          onClick={() => {
+                            setSelectedItemForReport(item)
+                            setShowReportModal(true)
+                          }}
+                          disabled={item.userId === user?.uid}
+                          className="w-7 lg:w-10 h-7 lg:h-10 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 flex items-center justify-center hover:bg-red-500 hover:border-red-500 hover:scale-110 transition-all group/btn disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Flag className="w-3 lg:w-4 h-3 lg:h-4 text-white/60 group-hover/btn:text-white" />
                         </button>
                       </div>
                     </div>
@@ -358,21 +475,48 @@ export default function BrowsePage() {
             </div>
 
             {/* Map Content */}
-            <div className="relative h-[400px] lg:h-[600px] bg-gradient-to-br from-[#2f1632] to-[#1a0d1c]">
-              {/* Placeholder Map */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center px-4">
-                  <div className="w-20 lg:w-24 h-20 lg:h-24 rounded-full bg-[#ff7400]/10 border border-[#ff7400]/20 flex items-center justify-center mx-auto mb-6">
-                    <MapPin className="w-10 lg:w-12 h-10 lg:h-12 text-[#ff7400]" />
-                  </div>
-                  <h4 className="text-white text-xl lg:text-2xl font-medium mb-3">Campus Map</h4>
-                  <p className="text-white/50 text-base lg:text-lg mb-6">{selectedItemForMap.location}</p>
-                  <div className="inline-flex items-center gap-3 px-6 lg:px-8 py-3 lg:py-4 backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl text-white shadow-xl">
-                    <MapPin className="w-5 h-5 text-[#ff7400]" />
-                    <span className="text-sm lg:text-base">Lyceum of Subic Bay Campus</span>
+            <div className="relative h-[400px] lg:h-[600px] bg-gradient-to-br from-[#2f1632] to-[#1a0d1c] overflow-hidden">
+              {selectedItemForMap.floorPlanId && selectedItemForMap.locationX !== undefined && selectedItemForMap.locationY !== undefined ? (
+                // Show floor plan with pinned location
+                <div className="absolute inset-0">
+                  <img
+                    src={getFloorPlan(selectedItemForMap.floorPlanId)?.imageUrl || '/floor-plans/ground_floor.png'}
+                    alt="Floor Plan"
+                    className="w-full h-full object-contain"
+                  />
+                  
+                  {/* Pinned Location Marker */}
+                  <div
+                    className="absolute transform -translate-x-1/2 -translate-y-1/2 z-20 animate-bounce"
+                    style={{
+                      left: `${selectedItemForMap.locationX}%`,
+                      top: `${selectedItemForMap.locationY}%`,
+                    }}
+                  >
+                    <div className="relative">
+                      {/* Pulsing ring */}
+                      <div className="absolute inset-0 rounded-full bg-[#ff7400] animate-ping opacity-75"></div>
+                      {/* Main marker */}
+                      <div className="relative w-12 h-12 rounded-full bg-[#ff7400] border-4 border-white shadow-2xl flex items-center justify-center">
+                        <MapPin className="w-6 h-6 text-white" />
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                // Fallback if no floor plan location
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center px-4">
+                    <div className="w-20 lg:w-24 h-20 lg:h-24 rounded-full bg-[#ff7400]/10 border border-[#ff7400]/20 flex items-center justify-center mx-auto mb-6">
+                      <MapPin className="w-10 lg:w-12 h-10 lg:h-12 text-[#ff7400]" />
+                    </div>
+                    <h4 className="text-white text-xl lg:text-2xl font-medium mb-3">Location Not Available</h4>
+                    <p className="text-white/50 text-base lg:text-lg mb-6">
+                      {selectedItemForMap.location.address || 'No specific location pinned'}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Location Info Overlay */}
               <div className="absolute bottom-6 lg:bottom-8 left-6 lg:left-8 right-6 lg:right-8 backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl lg:rounded-3xl p-5 lg:p-8 shadow-2xl">
@@ -381,7 +525,9 @@ export default function BrowsePage() {
                     <MapPin className="w-7 h-7 text-white" />
                   </div>
                   <div className="flex-1">
-                    <h5 className="text-white font-medium text-lg lg:text-xl mb-2">{selectedItemForMap.location.address || 'Campus Location'}</h5>
+                    <h5 className="text-white font-medium text-lg lg:text-xl mb-2">
+                      {selectedItemForMap.roomNumber || selectedItemForMap.location.address || 'Campus Location'}
+                    </h5>
                     <p className="text-white/60 text-sm lg:text-base mb-3">
                       {selectedItemForMap.type === 'lost' ? 'Last seen at this location' : 'Found at this location'}
                     </p>
@@ -390,10 +536,14 @@ export default function BrowsePage() {
                       <span>{formatTimestamp(selectedItemForMap.createdAt)}</span>
                     </div>
                   </div>
-                  <button className="w-full lg:w-auto px-6 lg:px-8 py-3 lg:py-4 bg-[#ff7400] text-white rounded-xl lg:rounded-2xl text-sm lg:text-base font-medium hover:bg-[#ff7400]/90 transition-all shadow-lg shadow-[#ff7400]/30 flex items-center justify-center gap-2">
-                    <Navigation className="w-5 h-5" />
-                    Get Directions
-                  </button>
+                  <Link
+                    to={`/item/${selectedItemForMap.id}`}
+                    onClick={() => setShowMapModal(false)}
+                    className="w-full lg:w-auto px-6 lg:px-8 py-3 lg:py-4 bg-[#ff7400] text-white rounded-xl lg:rounded-2xl text-sm lg:text-base font-medium hover:bg-[#ff7400]/90 transition-all shadow-lg shadow-[#ff7400]/30 flex items-center justify-center gap-2"
+                  >
+                    <Eye className="w-5 h-5" />
+                    View Details
+                  </Link>
                 </div>
               </div>
             </div>
@@ -423,14 +573,157 @@ export default function BrowsePage() {
                   <h6 className="text-white font-medium text-base lg:text-lg">{selectedItemForMap.title}</h6>
                   <p className="text-white/50 text-sm line-clamp-1">{selectedItemForMap.description}</p>
                 </div>
-                <Link
-                  to={`/item/${selectedItemForMap.id}`}
-                  className="px-6 py-3 backdrop-blur-xl bg-white/10 border border-white/20 text-white rounded-xl hover:bg-white/20 transition-all text-sm font-medium"
-                  onClick={() => setShowMapModal(false)}
-                >
-                  View Details
-                </Link>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && selectedItemForReport && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="backdrop-blur-xl bg-[#2f1632] border border-white/10 rounded-3xl max-w-lg w-full shadow-2xl my-8 max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 lg:p-8 border-b border-white/10 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center">
+                  <Flag className="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl lg:text-2xl font-medium text-white">Report Post</h3>
+                  <p className="text-white/60 text-sm">Help us keep the community safe</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowReportModal(false)
+                  setSelectedItemForReport(null)
+                  setReportCategory('spam')
+                  setReportDescription('')
+                }}
+                disabled={submittingReport}
+                className="w-10 h-10 rounded-full backdrop-blur-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all disabled:opacity-50"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            {/* Content - Scrollable */}
+            <div className="p-6 lg:p-8 space-y-6 overflow-y-auto flex-1">
+              {/* Item Preview */}
+              <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/10">
+                {selectedItemForReport.photos?.[0] ? (
+                  <img
+                    src={selectedItemForReport.photos[0]}
+                    alt={selectedItemForReport.title}
+                    className="w-16 h-16 rounded-xl object-cover"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-xl bg-white/5 flex items-center justify-center">
+                    <ImageIcon className="w-8 h-8 text-white/20" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-white font-medium truncate">{selectedItemForReport.title}</h4>
+                  <p className="text-white/50 text-sm truncate">{selectedItemForReport.description}</p>
+                </div>
+              </div>
+
+              {/* Warning */}
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+                <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                <p className="text-yellow-200/90 text-sm">
+                  False reports may result in account suspension. Please only report genuine violations.
+                </p>
+              </div>
+
+              {/* Category Selection */}
+              <div>
+                <label className="block text-white/70 text-sm mb-3 font-medium">
+                  Reason for Report
+                </label>
+                <div className="space-y-2">
+                  {[
+                    { value: 'spam', label: 'Spam or Misleading', desc: 'Fake or irrelevant content' },
+                    { value: 'fraud', label: 'Fraudulent Activity', desc: 'Scam or false claims' },
+                    { value: 'inappropriate', label: 'Inappropriate Content', desc: 'Offensive or harmful' },
+                    { value: 'duplicate', label: 'Duplicate Post', desc: 'Already posted' },
+                    { value: 'other', label: 'Other', desc: 'Something else' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setReportCategory(option.value as any)}
+                      disabled={submittingReport}
+                      className={`w-full p-4 rounded-xl text-left transition-all ${
+                        reportCategory === option.value
+                          ? 'bg-red-500/20 border-2 border-red-500'
+                          : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                      } disabled:opacity-50`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white font-medium text-sm">{option.label}</p>
+                          <p className="text-white/50 text-xs">{option.desc}</p>
+                        </div>
+                        {reportCategory === option.value && (
+                          <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center">
+                            <div className="w-2 h-2 rounded-full bg-white"></div>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-white/70 text-sm mb-2 font-medium">
+                  Additional Details
+                </label>
+                <textarea
+                  value={reportDescription}
+                  onChange={(e) => setReportDescription(e.target.value)}
+                  placeholder="Please provide more details about why you're reporting this post..."
+                  disabled={submittingReport}
+                  rows={4}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-red-500/50 transition-all resize-none disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 p-6 lg:p-8 border-t border-white/10 flex-shrink-0">
+              <button
+                onClick={() => {
+                  setShowReportModal(false)
+                  setSelectedItemForReport(null)
+                  setReportCategory('spam')
+                  setReportDescription('')
+                }}
+                disabled={submittingReport}
+                className="flex-1 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReportItem}
+                disabled={submittingReport || !reportDescription.trim()}
+                className="flex-1 px-6 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {submittingReport ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Flag className="w-4 h-4" />
+                    Submit Report
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

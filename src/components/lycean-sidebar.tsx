@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Search, PlusCircle, MessageCircle, User, LogOut, X, ScanSearch } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
+import NotificationBell from './NotificationBell'
 
 const navigation = [
   { name: 'Browse', href: '/browse', icon: Search },
@@ -12,14 +14,25 @@ const navigation = [
 
 export default function LyceanSidebar() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { logout } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+      navigate('/login')
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
+  }
 
   return (
     <>
       {/* Desktop Expanded Sidebar */}
       <aside className="hidden lg:flex fixed left-6 top-6 bottom-6 w-64 backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-6 flex-col z-50">
         {/* Logo & Brand */}
-        <Link to="/browse" className="mb-8 flex items-center gap-3">
+        <Link to="/browse" className="mb-6 flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#ff7400] to-[#ff7400]/60 flex items-center justify-center shadow-lg shadow-[#ff7400]/20 flex-shrink-0">
             <img 
               src="/Untitled design (3).png" 
@@ -32,6 +45,11 @@ export default function LyceanSidebar() {
             <p className="text-white/40 text-xs">Lost & Found</p>
           </div>
         </Link>
+
+        {/* Notification Bell */}
+        <div className="mb-6">
+          <NotificationBell />
+        </div>
 
         {/* Navigation */}
         <nav className="flex-1 flex flex-col gap-2">
@@ -57,7 +75,10 @@ export default function LyceanSidebar() {
         </nav>
 
         {/* Logout */}
-        <button className="w-full px-4 py-3 rounded-2xl bg-white/5 hover:bg-red-500/20 flex items-center gap-3 transition-all text-white/60 hover:text-red-400 mt-auto">
+        <button 
+          onClick={handleLogout}
+          className="w-full px-4 py-3 rounded-2xl bg-white/5 hover:bg-red-500/20 flex items-center gap-3 transition-all text-white/60 hover:text-red-400 mt-auto"
+        >
           <LogOut className="w-5 h-5 flex-shrink-0" />
           <span className="font-medium">Logout</span>
         </button>
@@ -120,7 +141,10 @@ export default function LyceanSidebar() {
               
               {/* Logout */}
               <button
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={() => {
+                  setIsMobileMenuOpen(false)
+                  handleLogout()
+                }}
                 className="flex items-center gap-3 backdrop-blur-xl bg-white/10 border border-white/10 rounded-full pr-6 pl-4 py-3 shadow-xl text-white/80 hover:bg-red-500/20 hover:text-red-400 transition-all animate-slideIn"
                 style={{ animationDelay: `${navigation.length * 50}ms` }}
               >

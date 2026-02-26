@@ -25,6 +25,10 @@ export interface Item {
     lng: number;
     address?: string;
   };
+  floorPlanId?: string;
+  locationX?: number;
+  locationY?: number;
+  roomNumber?: string;
   photos: string[];
   userId: string;
   userName: string;

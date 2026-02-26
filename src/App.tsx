@@ -2,6 +2,7 @@ import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { NotificationProvider } from '@/contexts/NotificationContext';
 import { AdminAuthProvider, useAdminAuth } from '@/contexts/AdminAuthContext';
 import Header from '@/components/header';
 
@@ -24,6 +25,7 @@ import MessagesPage from '@/pages/lycean/Messages';
 import PhotoMatchPage from '@/pages/lycean/PhotoMatch';
 import DiagnosticTest from '@/pages/lycean/DiagnosticTest';
 import MyItemsPage from '@/pages/lycean/MyItems';
+import NotificationsPage from '@/pages/lycean/Notifications';
 
 // Faculty pages
 import FacultyLoginPage from '@/pages/faculty/FacultyLogin';
@@ -73,7 +75,8 @@ export default function App() {
                        location.pathname.startsWith('/messages') ||
                        location.pathname.startsWith('/photo-match') ||
                        location.pathname.startsWith('/diagnostic') ||
-                       location.pathname.startsWith('/my-items');
+                       location.pathname.startsWith('/my-items') ||
+                       location.pathname.startsWith('/notifications');
   
   const isFacultyPage = location.pathname.startsWith('/faculty');
   const isAdminPage = location.pathname.startsWith('/admin');
@@ -83,7 +86,7 @@ export default function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="ui-theme">
       <AuthProvider>
-        <AdminAuthProvider>
+        <NotificationProvider>
           <div className="min-h-screen bg-background">
             {shouldShowHeader && <Header />}
             <Routes>
@@ -105,114 +108,143 @@ export default function App() {
               <Route path="/my-items" element={<MyItemsPage />} />
               <Route path="/photo-match" element={<PhotoMatchPage />} />
               <Route path="/messages" element={<MessagesPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/diagnostic" element={<DiagnosticTest />} />
-              
-              {/* Faculty Routes */}
-              <Route path="/faculty/login" element={<FacultyLoginPage />} />
-              
-              {/* Admin Routes */}
-              <Route path="/admin/login" element={<AdminLoginPage />} />
-              <Route 
-                path="/admin/dashboard" 
-                element={
+            
+            {/* Faculty Routes */}
+            <Route path="/faculty/login" element={<FacultyLoginPage />} />
+            
+            {/* Admin Routes - Wrapped with AdminAuthProvider */}
+            <Route path="/admin/login" element={
+              <AdminAuthProvider>
+                <AdminLoginPage />
+              </AdminAuthProvider>
+            } />
+            <Route 
+              path="/admin/dashboard" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <AdminDashboard />
                   </ProtectedAdminRoute>
-                } 
-              />
-              <Route 
-                path="/admin/approvals" 
-                element={
+                </AdminAuthProvider>
+              } 
+            />
+            <Route 
+              path="/admin/approvals" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <PendingApprovals />
                   </ProtectedAdminRoute>
-                } 
-              />
-              <Route 
-                path="/admin/users" 
-                element={
+                </AdminAuthProvider>
+              } 
+            />
+            <Route 
+              path="/admin/users" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <UsersManagement />
                   </ProtectedAdminRoute>
-                } 
-              />
-              <Route 
-                path="/admin/users/:id" 
-                element={
+                </AdminAuthProvider>
+              } 
+            />
+            <Route 
+              path="/admin/users/:id" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <UserDetails />
                   </ProtectedAdminRoute>
-                } 
-              />
-              <Route 
-                path="/admin/items" 
-                element={
+                </AdminAuthProvider>
+              } 
+            />
+            <Route 
+              path="/admin/items" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <ItemsManagement />
                   </ProtectedAdminRoute>
-                } 
-              />
-              <Route 
-                path="/admin/items/:id" 
-                element={
+                </AdminAuthProvider>
+              } 
+            />
+            <Route 
+              path="/admin/items/:id" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <ItemDetails />
                   </ProtectedAdminRoute>
-                } 
-              />
-              <Route 
-                path="/admin/reports" 
-                element={
+                </AdminAuthProvider>
+              } 
+            />
+            <Route 
+              path="/admin/reports" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <ReportsManagement />
                   </ProtectedAdminRoute>
-                } 
-              />
-              <Route 
-                path="/admin/messages" 
-                element={
+                </AdminAuthProvider>
+              } 
+            />
+            <Route 
+              path="/admin/messages" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <MessagesMonitoring />
                   </ProtectedAdminRoute>
-                } 
-              />
-              <Route 
-                path="/admin/ai-matching" 
-                element={
+                </AdminAuthProvider>
+              } 
+            />
+            <Route 
+              path="/admin/ai-matching" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <AIMatching />
                   </ProtectedAdminRoute>
-                } 
-              />
-              <Route 
-                path="/admin/analytics" 
-                element={
+                </AdminAuthProvider>
+              } 
+            />
+            <Route 
+              path="/admin/analytics" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <Analytics />
                   </ProtectedAdminRoute>
-                } 
-              />
-              <Route 
-                path="/admin/logs" 
-                element={
+                </AdminAuthProvider>
+              } 
+            />
+            <Route 
+              path="/admin/logs" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <ActivityLogs />
                   </ProtectedAdminRoute>
-                } 
-              />
-              <Route 
-                path="/admin/settings" 
-                element={
+                </AdminAuthProvider>
+              } 
+            />
+            <Route 
+              path="/admin/settings" 
+              element={
+                <AdminAuthProvider>
                   <ProtectedAdminRoute>
                     <Settings />
                   </ProtectedAdminRoute>
-                } 
-              />
-            </Routes>
-            <Toaster />
-          </div>
-        </AdminAuthProvider>
-      </AuthProvider>
-    </ThemeProvider>
-  );
+                </AdminAuthProvider>
+              } 
+            />
+          </Routes>
+          <Toaster />
+        </div>
+      </NotificationProvider>
+    </AuthProvider>
+  </ThemeProvider>
+);
 }
