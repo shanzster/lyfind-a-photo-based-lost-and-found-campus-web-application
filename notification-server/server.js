@@ -2,6 +2,9 @@ import express from 'express';
 import admin from 'firebase-admin';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
 dotenv.config();
 
@@ -12,19 +15,39 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Get current directory
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 // Initialize Firebase Admin
-admin.initializeApp({
-  credential: admin.credential.cert({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  }),
-});
+try {
+  // Try to use service account JSON file first
+  let credential;
+  
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    // Use JSON string from environment variable
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    credential = admin.credential.cert(serviceAccount);
+  } else if (process.env.FIREBASE_PRIVATE_KEY) {
+    // Use individual environment variables
+    credential = admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    });
+  } else {
+    throw new Error('No Firebase credentials found');
+  }
+
+  admin.initializeApp({ credential });
+  console.log('🔥 Firebase Admin initialized');
+} catch (error) {
+  console.error('❌ Failed to initialize Firebase Admin:', error);
+  process.exit(1);
+}
 
 const db = admin.firestore();
 const messaging = admin.messaging();
-
-console.log('🔥 Firebase Admin initialized');
 
 // Helper function to send push notification
 async function sendPushNotification(userId, notification) {
