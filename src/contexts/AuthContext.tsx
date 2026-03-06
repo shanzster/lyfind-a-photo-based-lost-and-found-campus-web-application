@@ -42,12 +42,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log('[Auth] Auth state changed:', user?.email || 'null');
       setUser(user);
       
       if (user) {
+        // Check if this is a new sign-in (has pending flag)
+        let isPending = false;
+        try {
+          isPending = sessionStorage.getItem('pendingGoogleSignIn') === 'true' ||
+                     localStorage.getItem('pendingGoogleSignIn') === 'true';
+        } catch (e) {
+          // Ignore
+        }
+
+        console.log('[Auth] User signed in, isPending:', isPending);
+
         // Load user profile from Firestore
         const profile = await userService.getUserProfile(user.uid);
         setUserProfile(profile);
+
+        // If this is from a redirect sign-in, navigate to browse
+        if (isPending) {
+          console.log('[Auth] Pending sign-in detected, clearing flag and navigating');
+          try {
+            sessionStorage.removeItem('pendingGoogleSignIn');
+            localStorage.removeItem('pendingGoogleSignIn');
+          } catch (e) {
+            // Ignore
+          }
+          
+          // Navigate to browse page
+          toast.success('Logged in successfully!');
+          setTimeout(() => {
+            window.location.href = '/browse';
+          }, 500);
+        }
       } else {
         setUserProfile(null);
       }
@@ -58,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, []);
 
-  // Handle redirect result from Google Sign-In (for PWA)
+  // Handle redirect result from Google Sign-In (for PWA/Mobile)
   useEffect(() => {
     const handleRedirectResult = async () => {
       try {
@@ -72,12 +101,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         console.log('[Auth] Checking for redirect result... isPending:', isPending);
+        console.log('[Auth] Current URL:', window.location.href);
         
         const result = await getRedirectResult(auth);
         
         if (result) {
           const user = result.user;
-          console.log('[Auth] Redirect result received:', user.email);
+          console.log('[Auth] ✅ Redirect result received:', user.email);
 
           // Clear the pending flag
           try {
@@ -89,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           // Double-check the email domain
           if (!userService.isLSBEmail(user.email!)) {
-            console.log('[Auth] Non-LSB email detected, signing out');
+            console.log('[Auth] ❌ Non-LSB email detected, signing out');
             await signOut(auth);
             toast.error('Only @lsb.edu.ph accounts are allowed');
             return;
@@ -106,27 +136,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserProfile(profile);
           setUser(user);
           
-          console.log('[Auth] Sign-in successful, redirecting to /browse');
+          console.log('[Auth] ✅ Sign-in successful, redirecting to /browse');
           toast.success('Logged in with Google successfully!');
           
           // Navigate to browse page after successful sign-in
           setTimeout(() => {
+            console.log('[Auth] Navigating to /browse...');
             window.location.href = '/browse';
           }, 500);
         } else {
-          console.log('[Auth] No redirect result found');
-          // Clear any stale pending flags
+          console.log('[Auth] No redirect result from getRedirectResult');
+          
+          // If we have a pending flag but no result, the auth state change will handle it
           if (isPending) {
-            try {
-              sessionStorage.removeItem('pendingGoogleSignIn');
-              localStorage.removeItem('pendingGoogleSignIn');
-            } catch (e) {
-              // Ignore
-            }
+            console.log('[Auth] Pending flag exists, waiting for auth state change...');
           }
         }
       } catch (error: any) {
-        console.error('[Auth] Redirect result error:', error);
+        console.error('[Auth] ❌ Redirect result error:', error);
         console.error('[Auth] Error code:', error.code);
         console.error('[Auth] Error message:', error.message);
         
@@ -148,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // Run immediately
     handleRedirectResult();
   }, []);
 
@@ -195,37 +223,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     try {
-      // Enhanced PWA detection for Android and iOS
-      const isStandalone = 
-        // Standard PWA detection
-        window.matchMedia('(display-mode: standalone)').matches ||
-        // iOS Safari
-        (window.navigator as any).standalone === true ||
-        // Android Chrome - check if opened from home screen
-        document.referrer.includes('android-app://') ||
-        // Check if running in TWA (Trusted Web Activity)
-        window.matchMedia('(display-mode: fullscreen)').matches ||
-        // Additional check for mobile PWA
-        (window.matchMedia('(display-mode: standalone)').matches && 
-         /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+      // AGGRESSIVE mobile detection - use redirect for ANY mobile device
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                      // Check for touch support
+                      ('ontouchstart' in window) ||
+                      // Check screen size
+                      (window.innerWidth <= 768);
 
-      // Check if mobile device
-      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      // Enhanced PWA detection
+      const isStandalone = 
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as any).standalone === true ||
+        document.referrer.includes('android-app://') ||
+        window.matchMedia('(display-mode: fullscreen)').matches;
+
+      console.log('[Auth] Device detection:');
+      console.log('[Auth] - isMobile:', isMobile);
+      console.log('[Auth] - isStandalone:', isStandalone);
+      console.log('[Auth] - userAgent:', navigator.userAgent);
+      console.log('[Auth] - innerWidth:', window.innerWidth);
 
       let result;
       
-      // Always use redirect for mobile (more reliable than popup)
+      // ALWAYS use redirect for mobile devices (popup doesn't work well on mobile)
       if (isMobile) {
-        console.log('[Auth] Mobile detected, using redirect flow');
-        console.log('[Auth] isStandalone:', isStandalone);
-        console.log('[Auth] User agent:', navigator.userAgent);
+        console.log('[Auth] ✅ Using REDIRECT flow for mobile');
         
         // Store a flag to know we're expecting a redirect result
         try {
           sessionStorage.setItem('pendingGoogleSignIn', 'true');
-          console.log('[Auth] Set pendingGoogleSignIn flag');
+          console.log('[Auth] Set pendingGoogleSignIn flag in sessionStorage');
         } catch (e) {
-          console.warn('[Auth] Could not set sessionStorage, using localStorage');
+          console.warn('[Auth] sessionStorage failed, using localStorage');
           localStorage.setItem('pendingGoogleSignIn', 'true');
         }
         
@@ -234,7 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       } else {
         // Use popup for desktop browsers only
-        console.log('[Auth] Desktop browser detected, using popup flow');
+        console.log('[Auth] ✅ Using POPUP flow for desktop');
         result = await signInWithPopup(auth, provider);
       }
 
