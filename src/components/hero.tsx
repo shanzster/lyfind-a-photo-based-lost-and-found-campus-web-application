@@ -1,7 +1,22 @@
 import { useState, useEffect } from 'react'
 
+// Extend Window interface for beforeinstallprompt
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+declare global {
+  interface WindowEventMap {
+    beforeinstallprompt: BeforeInstallPromptEvent;
+  }
+}
+
 export default function Hero() {
   const [notifications, setNotifications] = useState<Array<{ id: number; item: string; status: string; emoji: string }>>([])
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+  const [isInstallable, setIsInstallable] = useState(false)
+  const [isInstalled, setIsInstalled] = useState(false)
 
   const items = [
     { item: 'iPhone 13 Pro', status: 'Found', emoji: 'https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Mobile%20Phone.png' },
@@ -14,6 +29,40 @@ export default function Hero() {
     { item: 'Textbook', status: 'Missing', emoji: 'https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Books.png' },
   ]
 
+  // Handle PWA install prompt
+  useEffect(() => {
+    // Check if app is already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true)
+      return
+    }
+
+    // Listen for beforeinstallprompt event
+    const handleBeforeInstallPrompt = (e: BeforeInstallPromptEvent) => {
+      console.log('[PWA] beforeinstallprompt event fired')
+      e.preventDefault()
+      setDeferredPrompt(e)
+      setIsInstallable(true)
+    }
+
+    // Listen for app installed event
+    const handleAppInstalled = () => {
+      console.log('[PWA] App installed')
+      setIsInstalled(true)
+      setIsInstallable(false)
+      setDeferredPrompt(null)
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt as EventListener)
+    window.addEventListener('appinstalled', handleAppInstalled)
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt as EventListener)
+      window.removeEventListener('appinstalled', handleAppInstalled)
+    }
+  }, [])
+
+  // Animated notifications
   useEffect(() => {
     const interval = setInterval(() => {
       const randomItem = items[Math.floor(Math.random() * items.length)]
@@ -33,13 +82,41 @@ export default function Hero() {
     return () => clearInterval(interval)
   }, [])
 
+  // Handle install button click
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) {
+      console.log('[PWA] No install prompt available')
+      // Show instructions for manual installation
+      alert('To install LyFind:\n\n' +
+        'Chrome/Edge: Click the menu (⋮) → "Install LyFind"\n' +
+        'Safari (iOS): Tap Share → "Add to Home Screen"\n' +
+        'Firefox: Tap menu → "Install"')
+      return
+    }
+
+    console.log('[PWA] Showing install prompt')
+    deferredPrompt.prompt()
+
+    const { outcome } = await deferredPrompt.userChoice
+    console.log('[PWA] User choice:', outcome)
+
+    if (outcome === 'accepted') {
+      console.log('[PWA] User accepted the install prompt')
+    } else {
+      console.log('[PWA] User dismissed the install prompt')
+    }
+
+    setDeferredPrompt(null)
+    setIsInstallable(false)
+  }
+
   return (
     <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
       {/* Radial gradient overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,#2f1632_70%)]"></div>
 
-      {/* Animated Notifications */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {/* Animated Notifications - Hidden on mobile */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden hidden md:block">
         {notifications.map((notification) => {
           // Generate position that avoids the center area (where text is)
           const isLeft = Math.random() > 0.5
@@ -220,12 +297,28 @@ export default function Hero() {
 
         {/* PWA Install Section */}
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 max-w-md">
-          <button className="w-full px-6 py-3 bg-white/10 hover:bg-white/15 text-white font-medium rounded-xl transition-all mb-4 flex items-center justify-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Install Now
-          </button>
+          {isInstalled ? (
+            <div className="w-full px-6 py-3 bg-green-500/20 border border-green-500/30 text-green-400 font-medium rounded-xl mb-4 flex items-center justify-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              App Installed
+            </div>
+          ) : (
+            <button 
+              onClick={handleInstallClick}
+              className={`w-full px-6 py-3 ${
+                isInstallable 
+                  ? 'bg-[#ff7400] hover:bg-[#ff8500] text-white' 
+                  : 'bg-white/10 hover:bg-white/15 text-white/70'
+              } font-medium rounded-xl transition-all mb-4 flex items-center justify-center gap-2`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              {isInstallable ? 'Install Now' : 'Install App'}
+            </button>
+          )}
           
           {/* Platform Icons */}
           <div className="flex items-center justify-center gap-4 mb-3">
