@@ -589,7 +589,7 @@ export default function MessagesPage() {
                           <img
                             src={URL.createObjectURL(file)}
                             alt={`Preview ${idx + 1}`}
-                            className="w-20 h-20 rounded-lg object-cover"
+                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg object-cover"
                           />
                           <button
                             onClick={() => removeSelectedImage(idx)}
@@ -654,24 +654,24 @@ export default function MessagesPage() {
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={sending || uploadingImages}
-                      className="p-3 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-50"
+                      className="p-2.5 sm:p-3 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-50 flex-shrink-0"
                       title="Attach images"
                     >
-                      <Paperclip className="w-5 h-5" />
+                      <Paperclip className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
 
                     {/* Location Pin Button */}
                     <button
                       onClick={() => setShowLocationModal(true)}
                       disabled={sending || uploadingImages}
-                      className={`p-3 border rounded-xl transition-all disabled:opacity-50 ${
+                      className={`p-2.5 sm:p-3 border rounded-xl transition-all disabled:opacity-50 flex-shrink-0 ${
                         locationPin
                           ? 'bg-[#ff7400] border-[#ff7400] text-white'
                           : 'bg-white/5 border-white/10 text-white/60 hover:text-white hover:bg-white/10'
                       }`}
                       title="Share location"
                     >
-                      <MapPin className="w-5 h-5" />
+                      <MapPin className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
 
                     <input
@@ -686,17 +686,17 @@ export default function MessagesPage() {
                       }}
                       placeholder="Type your message..."
                       disabled={sending || uploadingImages}
-                      className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-[#ff7400]/50 transition-all disabled:opacity-50"
+                      className="flex-1 min-w-0 px-3 py-2.5 sm:px-4 sm:py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm sm:text-base placeholder:text-white/40 focus:outline-none focus:border-[#ff7400]/50 transition-all disabled:opacity-50"
                     />
                     <button
                       onClick={handleSendMessage}
                       disabled={(!newMessage.trim() && selectedImages.length === 0 && !locationPin) || sending || uploadingImages}
-                      className="px-6 py-3 bg-[#ff7400] hover:bg-[#ff8500] text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="px-4 sm:px-6 py-2.5 sm:py-3 bg-[#ff7400] hover:bg-[#ff8500] text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 flex-shrink-0"
                     >
                       {sending || uploadingImages ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
                       ) : (
-                        <Send className="w-5 h-5" />
+                        <Send className="w-4 h-4 sm:w-5 sm:h-5" />
                       )}
                     </button>
                   </div>

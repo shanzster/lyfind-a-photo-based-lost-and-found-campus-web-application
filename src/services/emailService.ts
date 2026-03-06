@@ -2,11 +2,15 @@ import SibApiV3Sdk from 'sib-api-v3-sdk';
 
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
 const apiKey = defaultClient.authentications['api-key'];
-apiKey.apiKey = import.meta.env?.VITE_BREVO_API_KEY || '';
+
+// Get API key from environment variables
+const brevoApiKey = import.meta.env?.VITE_BREVO_API_KEY || '';
+console.log('[EmailService] Brevo API Key loaded:', brevoApiKey ? `${brevoApiKey.substring(0, 10)}...` : 'NOT FOUND');
+apiKey.apiKey = brevoApiKey;
 
 const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
-// Store OTPs temporarily (in production, use Redis or database)
+// Store OTPs in memory (simple Map)
 const otpStore = new Map<string, { otp: string; expiresAt: number }>();
 
 export const emailService = {
@@ -34,13 +38,13 @@ export const emailService = {
       
       console.log('[EmailService] Generated OTP:', otp, 'for email:', normalizedEmail);
       
-      // Store OTP with 10 minute expiration
+      // Store OTP in memory with 10 minute expiration
       otpStore.set(normalizedEmail, {
         otp,
         expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes
       });
       
-      console.log('[EmailService] Stored OTP in otpStore. Current store size:', otpStore.size);
+      console.log('[EmailService] Stored OTP in memory. Store size:', otpStore.size);
 
       // Send email
       const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
@@ -340,10 +344,27 @@ export const emailService = {
         message: 'OTP sent successfully to your email'
       };
     } catch (error: any) {
-      console.error('Error sending OTP:', error);
+      console.error('[EmailService] Error sending OTP:', error);
+      console.error('[EmailService] Error details:', {
+        code: error.code,
+        message: error.message,
+        response: error.response?.text || error.response?.body
+      });
+      
+      let errorMessage = 'Failed to send OTP. Please try again.';
+      
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        errorMessage = 'Network error. Please check your internet connection.';
+      } else if (error.statusCode === 401 || error.message?.includes('401')) {
+        errorMessage = 'Invalid Brevo API key. Please check your configuration.';
+        console.error('[EmailService] API Key being used:', brevoApiKey ? `${brevoApiKey.substring(0, 15)}...` : 'NONE');
+      } else if (error.statusCode === 400) {
+        errorMessage = 'Invalid email configuration. Please contact support.';
+      }
+      
       return {
         success: false,
-        message: 'Failed to send OTP. Please try again.'
+        message: errorMessage
       };
     }
   },
@@ -355,12 +376,10 @@ export const emailService = {
     const normalizedOTP = otp.trim();
     
     console.log('[EmailService] Verifying OTP:', normalizedOTP, 'for email:', normalizedEmail);
-    console.log('[EmailService] Current otpStore size:', otpStore.size);
+    console.log('[EmailService] Store size:', otpStore.size);
     
     const stored = otpStore.get(normalizedEmail);
     
-    console.log('[EmailService] Stored OTP data:', stored);
-
     if (!stored) {
       console.log('[EmailService] No OTP found for email');
       return {
@@ -369,6 +388,7 @@ export const emailService = {
       };
     }
 
+    // Check if expired
     if (Date.now() > stored.expiresAt) {
       console.log('[EmailService] OTP expired');
       otpStore.delete(normalizedEmail);
@@ -378,6 +398,7 @@ export const emailService = {
       };
     }
 
+    // Verify OTP
     if (stored.otp !== normalizedOTP) {
       console.log('[EmailService] OTP mismatch. Expected:', stored.otp, 'Got:', normalizedOTP);
       return {
@@ -402,6 +423,7 @@ export const emailService = {
     
     // Delete old OTP if exists
     otpStore.delete(normalizedEmail);
+    console.log('[EmailService] Deleted old OTP for:', normalizedEmail);
     
     // Send new OTP
     return this.sendOTP(normalizedEmail);

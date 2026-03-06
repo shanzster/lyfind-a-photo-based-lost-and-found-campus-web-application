@@ -49,6 +49,11 @@ import Analytics from '@/pages/admin/Analytics';
 import ActivityLogs from '@/pages/admin/ActivityLogs';
 import Settings from '@/pages/admin/Settings';
 
+// Utility pages
+import SeedAdmin from '@/pages/SeedAdmin';
+import FixAdmin from '@/pages/FixAdmin';
+import OAuthDiagnostic from '@/pages/OAuthDiagnostic';
+
 // Protected Admin Route Component
 function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
   const { user, adminProfile, loading } = useAdminAuth();
@@ -104,6 +109,11 @@ export default function App() {
               <Route path="/services" element={<ServicesPage />} />
               <Route path="/developer" element={<DeveloperPage />} />
               <Route path="/institution" element={<InstitutionPage />} />
+              
+              {/* Utility Routes */}
+              <Route path="/seed-admin" element={<SeedAdmin />} />
+              <Route path="/fix-admin" element={<FixAdmin />} />
+              <Route path="/oauth-diagnostic" element={<OAuthDiagnostic />} />
               
               {/* Public Routes */}
               <Route path="/public/item/:id" element={<PublicItemPage />} />

@@ -120,14 +120,10 @@ export const notificationService = {
 
       console.log('[NotificationService] Notification created:', docRef.id);
       
-      // Show browser notification immediately (client-side only)
-      showBrowserNotification(
-        notificationData.title,
-        notificationData.message,
-        notificationData.actionUrl
-      );
+      // DON'T show browser notification here - it will be shown by the recipient's listener
+      // showBrowserNotification() is called in the real-time subscription
       
-      // Send push notification via backend server
+      // Send push notification via backend server (for mobile/PWA)
       await sendPushViaBackend(notificationData.userId, {
         title: notificationData.title,
         message: notificationData.message,
@@ -252,6 +248,8 @@ export const notificationService = {
       limit(limitCount)
     );
 
+    let isFirstLoad = true;
+
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
@@ -260,6 +258,28 @@ export const notificationService = {
           ...doc.data(),
         } as Notification));
 
+        // Show browser notification for NEW notifications (not on first load)
+        if (!isFirstLoad) {
+          snapshot.docChanges().forEach(change => {
+            if (change.type === 'added') {
+              const notification = {
+                id: change.doc.id,
+                ...change.doc.data(),
+              } as Notification;
+              
+              // Show browser notification for new unread notifications
+              if (!notification.read) {
+                showBrowserNotification(
+                  notification.title,
+                  notification.message,
+                  notification.actionUrl
+                );
+              }
+            }
+          });
+        }
+        
+        isFirstLoad = false;
         callback(notifications);
       },
       (error) => {

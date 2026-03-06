@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import {
   User,
   createUserWithEmailAndPassword,
@@ -14,6 +14,8 @@ import {
 import { auth } from '@/lib/firebase';
 import { userService, UserProfile } from '@/services/userService';
 import { toast } from 'sonner';
+import { pwaDebug } from '@/utils/pwaDebug';
+import { emitAuthStatus } from '@/components/AuthStatus';
 
 interface AuthContextType {
   user: User | null;
@@ -35,167 +37,242 @@ export function useAuth() {
   return context;
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode}) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [redirectProcessing, setRedirectProcessing] = useState(false);
+  const redirectHandled = useRef(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('[Auth] Auth state changed:', user?.email || 'null');
-      setUser(user);
-      
-      if (user) {
-        // Check if this is a new sign-in (has pending flag)
-        let isPending = false;
-        try {
-          isPending = sessionStorage.getItem('pendingGoogleSignIn') === 'true' ||
-                     localStorage.getItem('pendingGoogleSignIn') === 'true';
-        } catch (e) {
-          // Ignore
-        }
+    let unsubscribe: (() => void) | undefined;
 
-        console.log('[Auth] User signed in, isPending:', isPending);
-
-        // Load user profile from Firestore
-        const profile = await userService.getUserProfile(user.uid);
-        setUserProfile(profile);
-
-        // If this is from a redirect sign-in, navigate to browse
-        if (isPending) {
-          console.log('[Auth] Pending sign-in detected, clearing flag and navigating');
-          try {
-            sessionStorage.removeItem('pendingGoogleSignIn');
-            localStorage.removeItem('pendingGoogleSignIn');
-          } catch (e) {
-            // Ignore
-          }
-          
-          // Navigate to browse page
-          toast.success('Logged in successfully!');
-          setTimeout(() => {
-            window.location.href = '/browse';
-          }, 500);
-        }
-      } else {
-        setUserProfile(null);
-      }
-      
-      setLoading(false);
-    });
-
-    return unsubscribe;
-  }, []);
-
-  // Handle redirect result from Google Sign-In (for PWA/Mobile)
-  useEffect(() => {
-    const handleRedirectResult = async () => {
+    const init = async () => {
       try {
-        // Check if we're expecting a redirect result
-        let isPending = false;
-        try {
-          isPending = sessionStorage.getItem('pendingGoogleSignIn') === 'true' ||
-                     localStorage.getItem('pendingGoogleSignIn') === 'true';
-        } catch (e) {
-          console.warn('[Auth] Could not access storage');
-        }
-
-        console.log('[Auth] Checking for redirect result... isPending:', isPending);
-        console.log('[Auth] Current URL:', window.location.href);
+        console.log('🚀 [AUTH] === AUTH INIT START ===');
+        console.log('🌐 [AUTH] URL:', window.location.href);
+        console.log('📱 [AUTH] User Agent:', navigator.userAgent);
+        console.log('🔍 [AUTH] Display mode:', window.matchMedia('(display-mode: standalone)').matches ? 'PWA' : 'Browser');
         
+        pwaDebug.log('=== AUTH INIT START ===');
+        pwaDebug.log('URL: ' + window.location.href);
+        pwaDebug.log('User Agent: ' + navigator.userAgent);
+        emitAuthStatus('Initializing...');
+
+        // Check if we're returning from Google redirect
+        const wasRedirecting = localStorage.getItem('googleSignInPending');
+        console.log('🔄 [AUTH] Was redirecting:', wasRedirecting);
+        pwaDebug.log('Was redirecting: ' + wasRedirecting);
+
+        // Method 1: Check redirect result
+        console.log('📋 [AUTH] Method 1: Checking getRedirectResult()...');
+        pwaDebug.log('Method 1: Checking getRedirectResult()...');
+        emitAuthStatus('Checking for Google sign-in...');
+        
+        // Check URL for error parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const errorParam = urlParams.get('error');
+        const errorDescription = urlParams.get('error_description');
+        if (errorParam) {
+          console.error('🚨 [AUTH] URL contains error parameter:', errorParam);
+          console.error('🚨 [AUTH] Error description:', errorDescription);
+          pwaDebug.log('🚨 URL error: ' + errorParam + ' - ' + errorDescription);
+        }
+        
+        console.log('📋 [AUTH] Calling getRedirectResult()...');
         const result = await getRedirectResult(auth);
-        
+        console.log('📋 [AUTH] getRedirectResult() returned:', result);
+        console.log('📋 [AUTH] Result type:', typeof result);
+        console.log('📋 [AUTH] Result is null?', result === null);
+
         if (result) {
-          const user = result.user;
-          console.log('[Auth] ✅ Redirect result received:', user.email);
-
-          // Clear the pending flag
-          try {
-            sessionStorage.removeItem('pendingGoogleSignIn');
-            localStorage.removeItem('pendingGoogleSignIn');
-          } catch (e) {
-            console.warn('[Auth] Could not clear storage flags');
-          }
-
-          // Double-check the email domain
-          if (!userService.isLSBEmail(user.email!)) {
-            console.log('[Auth] ❌ Non-LSB email detected, signing out');
-            await signOut(auth);
-            toast.error('Only @lsb.edu.ph accounts are allowed');
-            return;
-          }
-
-          console.log('[Auth] Creating/updating user profile...');
-          // Create or update user profile
-          await userService.createUserProfile(user, {
-            displayName: user.displayName || user.email?.split('@')[0] || 'User',
-          });
-          
-          // Load the user profile
-          const profile = await userService.getUserProfile(user.uid);
-          setUserProfile(profile);
-          setUser(user);
-          
-          console.log('[Auth] ✅ Sign-in successful, redirecting to /browse');
-          toast.success('Logged in with Google successfully!');
-          
-          // Navigate to browse page after successful sign-in
-          setTimeout(() => {
-            console.log('[Auth] Navigating to /browse...');
-            window.location.href = '/browse';
-          }, 500);
+          console.log('✅ [AUTH] Redirect result found!');
+          console.log('👤 [AUTH] User email:', result.user.email);
+          console.log('🆔 [AUTH] User UID:', result.user.uid);
+          pwaDebug.log('✅ Redirect result found!');
+          pwaDebug.log('Email: ' + result.user.email);
+          localStorage.removeItem('googleSignInPending');
+          await handleGoogleSignIn(result.user);
+          return;
         } else {
-          console.log('[Auth] No redirect result from getRedirectResult');
+          console.log('❌ [AUTH] No redirect result (null)');
+          pwaDebug.log('❌ No redirect result');
+        }
+
+        // Method 2: If we were redirecting but no result, wait for auth state
+        if (wasRedirecting === 'true') {
+          console.log('⏳ [AUTH] Method 2: Waiting for auth state (was redirecting)...');
+          pwaDebug.log('Method 2: Waiting for auth state (was redirecting)...');
+          emitAuthStatus('Completing sign-in...');
           
-          // If we have a pending flag but no result, the auth state change will handle it
-          if (isPending) {
-            console.log('[Auth] Pending flag exists, waiting for auth state change...');
+          // Wait up to 5 seconds for auth state to update
+          let attempts = 0;
+          const maxAttempts = 10;
+          
+          while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const currentUser = auth.currentUser;
+            
+            console.log(`⏳ [AUTH] Attempt ${attempts + 1}/${maxAttempts}: Current user =`, currentUser?.email || 'null');
+            pwaDebug.log(`Attempt ${attempts + 1}: Current user = ${currentUser?.email || 'null'}`);
+            
+            if (currentUser) {
+              console.log('✅ [AUTH] User found via polling!');
+              console.log('👤 [AUTH] User email:', currentUser.email);
+              pwaDebug.log('✅ User found via polling!');
+              localStorage.removeItem('googleSignInPending');
+              await handleGoogleSignIn(currentUser);
+              return;
+            }
+            
+            attempts++;
           }
+          
+          console.log('❌ [AUTH] Timeout waiting for user after', maxAttempts, 'attempts');
+          pwaDebug.log('❌ Timeout waiting for user');
+          localStorage.removeItem('googleSignInPending');
+          emitAuthStatus('❌ Sign-in timeout');
+          toast.error('Sign-in timeout. Please try again.');
         }
+
+        // Method 3: Check current user
+        console.log('🔍 [AUTH] Method 3: Checking auth.currentUser...');
+        pwaDebug.log('Method 3: Checking auth.currentUser...');
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          console.log('✅ [AUTH] Current user found:', currentUser.email);
+          pwaDebug.log('✅ Current user: ' + currentUser.email);
+        } else {
+          console.log('❌ [AUTH] No current user');
+          pwaDebug.log('❌ No current user');
+        }
+
+        // Method 4: Auth listener
+        console.log('👂 [AUTH] Method 4: Setting up auth state listener...');
+        pwaDebug.log('Method 4: Setting up listener...');
+        
+        unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+          console.log('👂 [AUTH] Auth state changed:', firebaseUser?.email || 'null');
+          pwaDebug.log('Listener triggered: ' + (firebaseUser?.email || 'null'));
+
+          if (firebaseUser) {
+            console.log('✅ [AUTH] User authenticated:', firebaseUser.email);
+            console.log('🆔 [AUTH] UID:', firebaseUser.uid);
+            setUser(firebaseUser);
+            const profile = await userService.getUserProfile(firebaseUser.uid);
+            console.log('📄 [AUTH] Profile loaded:', profile);
+            setUserProfile(profile);
+          } else {
+            console.log('❌ [AUTH] No user (signed out)');
+            setUser(null);
+            setUserProfile(null);
+          }
+
+          setLoading(false);
+        });
+
+        console.log('✅ [AUTH] === AUTH INIT COMPLETE ===');
+        pwaDebug.log('=== AUTH INIT COMPLETE ===');
       } catch (error: any) {
-        console.error('[Auth] ❌ Redirect result error:', error);
-        console.error('[Auth] Error code:', error.code);
-        console.error('[Auth] Error message:', error.message);
-        
-        // Clear pending flags on error
-        try {
-          sessionStorage.removeItem('pendingGoogleSignIn');
-          localStorage.removeItem('pendingGoogleSignIn');
-        } catch (e) {
-          // Ignore
-        }
-        
-        if (error.code === 'auth/invalid-api-key' || error.code === 'auth/network-request-failed') {
-          toast.error('Network error. Please check your connection and try again.');
-        } else if (error.message?.includes('lsb.edu.ph')) {
-          toast.error('Only @lsb.edu.ph accounts are allowed');
-        } else if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
-          toast.error('Failed to sign in with Google. Please try again.');
-        }
+        console.error('❌ [AUTH] ERROR in init:', error);
+        console.error('❌ [AUTH] Error message:', error.message);
+        console.error('❌ [AUTH] Error code:', error.code);
+        console.error('❌ [AUTH] Error stack:', error.stack);
+        pwaDebug.log('❌ ERROR: ' + error.message);
+        pwaDebug.log('Code: ' + (error.code || 'none'));
+        emitAuthStatus('❌ Error: ' + error.message);
+        toast.error('Auth error: ' + error.message);
+        setRedirectProcessing(false);
+        setLoading(false);
       }
     };
 
-    // Run immediately
-    handleRedirectResult();
+    // Helper function to handle Google sign-in
+    const handleGoogleSignIn = async (user: User) => {
+      try {
+        console.log('🔐 [GOOGLE] === HANDLING GOOGLE SIGN-IN ===');
+        console.log('👤 [GOOGLE] User email:', user.email);
+        console.log('🆔 [GOOGLE] User UID:', user.uid);
+        console.log('📛 [GOOGLE] Display name:', user.displayName);
+        
+        setRedirectProcessing(true);
+        pwaDebug.log('Handling Google sign-in for: ' + user.email);
+        emitAuthStatus('✅ Google sign-in detected!');
+        toast.success('Google sign-in successful!');
+        redirectHandled.current = true;
+
+        // Validate email
+        console.log('✉️ [GOOGLE] Validating email domain...');
+        pwaDebug.log('Validating email domain...');
+        if (!userService.isLSBEmail(user.email!)) {
+          console.log('❌ [GOOGLE] Non-LSB email:', user.email);
+          pwaDebug.log('❌ Non-LSB email');
+          await signOut(auth);
+          emitAuthStatus('❌ Only @lsb.edu.ph allowed');
+          toast.error('Only @lsb.edu.ph accounts allowed');
+          setRedirectProcessing(false);
+          setLoading(false);
+          return;
+        }
+        console.log('✅ [GOOGLE] Email domain valid');
+        pwaDebug.log('✅ Email valid');
+
+        // Create profile
+        console.log('📝 [GOOGLE] Creating user profile in Firestore...');
+        pwaDebug.log('Creating user profile...');
+        emitAuthStatus('Setting up account...');
+        toast.loading('Setting up account...', { id: 'setup' });
+        
+        await userService.createUserProfile(user, {
+          displayName: user.displayName || user.email?.split('@')[0] || 'User',
+        });
+        console.log('✅ [GOOGLE] Profile created successfully');
+        pwaDebug.log('✅ Profile created');
+
+        console.log('📄 [GOOGLE] Loading user profile...');
+        pwaDebug.log('Loading profile...');
+        const profile = await userService.getUserProfile(user.uid);
+        console.log('✅ [GOOGLE] Profile loaded:', profile);
+        setUserProfile(profile);
+        setUser(user);
+        pwaDebug.log('✅ Profile loaded');
+
+        console.log('⏳ [GOOGLE] Waiting 1 second before navigation...');
+        pwaDebug.log('Waiting before navigation...');
+        emitAuthStatus('✅ Ready! Redirecting...');
+        toast.success('Ready! Redirecting...', { id: 'setup' });
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        console.log('🚀 [GOOGLE] Navigating to /browse');
+        pwaDebug.log('Navigating to /browse');
+        window.location.href = '/browse';
+      } catch (error: any) {
+        console.error('❌ [GOOGLE] Error in handleGoogleSignIn:', error);
+        console.error('❌ [GOOGLE] Error message:', error.message);
+        console.error('❌ [GOOGLE] Error code:', error.code);
+        pwaDebug.log('❌ Error in handleGoogleSignIn: ' + error.message);
+        setRedirectProcessing(false);
+        throw error;
+      }
+    };
+
+    init();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   const signup = async (email: string, password: string, name: string) => {
-    // Check if email is from LSB domain
     if (!userService.isLSBEmail(email)) {
       throw new Error('Only @lsb.edu.ph email addresses are allowed');
     }
 
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    
-    // Update Firebase Auth profile
     await updateProfile(userCredential.user, { displayName: name });
+    await userService.createUserProfile(userCredential.user, { displayName: name });
     
-    // Create user profile in Firestore with displayName
-    await userService.createUserProfile(userCredential.user, {
-      displayName: name,
-    });
-    
-    // Load the user profile
     const profile = await userService.getUserProfile(userCredential.user.uid);
     setUserProfile(profile);
     setUser(userCredential.user);
@@ -204,7 +281,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
-    // Check if email is from LSB domain
     if (!userService.isLSBEmail(email)) {
       throw new Error('Only @lsb.edu.ph email addresses are allowed');
     }
@@ -215,86 +291,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    
-    // Force account selection and restrict to lsb.edu.ph domain
     provider.setCustomParameters({
       prompt: 'select_account',
-      hd: 'lsb.edu.ph', // Hosted domain - restricts to LSB accounts
+      hd: 'lsb.edu.ph',
     });
 
     try {
-      // AGGRESSIVE mobile detection - use redirect for ANY mobile device
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-                      // Check for touch support
-                      ('ontouchstart' in window) ||
-                      // Check screen size
-                      (window.innerWidth <= 768);
+      const isPWA = window.matchMedia('(display-mode: standalone)').matches ||
+                    (window.navigator as any).standalone === true ||
+                    document.referrer.includes('android-app://');
 
-      // Enhanced PWA detection
-      const isStandalone = 
-        window.matchMedia('(display-mode: standalone)').matches ||
-        (window.navigator as any).standalone === true ||
-        document.referrer.includes('android-app://') ||
-        window.matchMedia('(display-mode: fullscreen)').matches;
-
-      console.log('[Auth] Device detection:');
-      console.log('[Auth] - isMobile:', isMobile);
-      console.log('[Auth] - isStandalone:', isStandalone);
-      console.log('[Auth] - userAgent:', navigator.userAgent);
-      console.log('[Auth] - innerWidth:', window.innerWidth);
-
-      let result;
+      console.log('🔵 [LOGIN] === GOOGLE SIGN-IN START ===');
+      console.log('📱 [LOGIN] Is PWA:', isPWA);
+      console.log('🖥️ [LOGIN] Display mode:', window.matchMedia('(display-mode: standalone)').matches);
+      console.log('🍎 [LOGIN] iOS standalone:', (window.navigator as any).standalone);
+      console.log('🤖 [LOGIN] Android app referrer:', document.referrer);
+      console.log('🌐 [LOGIN] Current URL:', window.location.href);
+      console.log('🔑 [LOGIN] Auth domain:', auth.app.options.authDomain);
       
-      // ALWAYS use redirect for mobile devices (popup doesn't work well on mobile)
-      if (isMobile) {
-        console.log('[Auth] ✅ Using REDIRECT flow for mobile');
-        
-        // Store a flag to know we're expecting a redirect result
-        try {
-          sessionStorage.setItem('pendingGoogleSignIn', 'true');
-          console.log('[Auth] Set pendingGoogleSignIn flag in sessionStorage');
-        } catch (e) {
-          console.warn('[Auth] sessionStorage failed, using localStorage');
-          localStorage.setItem('pendingGoogleSignIn', 'true');
-        }
-        
+      pwaDebug.log('=== GOOGLE SIGN-IN START ===');
+      pwaDebug.log('Is PWA: ' + isPWA);
+      emitAuthStatus('Starting Google sign-in...');
+
+      if (isPWA) {
+        console.log('🔄 [LOGIN] Using REDIRECT flow (PWA mode)');
+        console.log('💾 [LOGIN] Setting googleSignInPending flag in localStorage');
+        pwaDebug.log('Using REDIRECT flow');
+        pwaDebug.log('Setting googleSignInPending flag');
+        localStorage.setItem('googleSignInPending', 'true');
+        console.log('✅ [LOGIN] Flag set, calling signInWithRedirect()...');
+        emitAuthStatus('Redirecting to Google...');
+        toast.info('Redirecting to Google...', { duration: 2000 });
         await signInWithRedirect(auth, provider);
-        // The redirect will happen, and we'll handle the result in useEffect
+        console.log('🚀 [LOGIN] signInWithRedirect() called (should redirect now)');
         return;
       } else {
-        // Use popup for desktop browsers only
-        console.log('[Auth] ✅ Using POPUP flow for desktop');
-        result = await signInWithPopup(auth, provider);
+        console.log('🪟 [LOGIN] Using POPUP flow (Browser mode)');
+        pwaDebug.log('Using POPUP flow');
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+
+        console.log('✅ [LOGIN] Popup success!');
+        console.log('👤 [LOGIN] User email:', user.email);
+        console.log('🆔 [LOGIN] User UID:', user.uid);
+        pwaDebug.log('✅ Popup success: ' + user.email);
+
+        if (!userService.isLSBEmail(user.email!)) {
+          console.log('❌ [LOGIN] Non-LSB email:', user.email);
+          pwaDebug.log('❌ Non-LSB email');
+          await signOut(auth);
+          toast.error('Only @lsb.edu.ph accounts allowed');
+          throw new Error('Only @lsb.edu.ph allowed');
+        }
+
+        console.log('📝 [LOGIN] Creating user profile...');
+        await userService.createUserProfile(user, {
+          displayName: user.displayName || user.email?.split('@')[0] || 'User',
+        });
+
+        console.log('📄 [LOGIN] Loading profile...');
+        const profile = await userService.getUserProfile(user.uid);
+        setUserProfile(profile);
+        setUser(user);
+
+        console.log('✅ [LOGIN] Login complete, navigating to /browse');
+        toast.success('Logged in successfully!');
+        setTimeout(() => {
+          window.location.href = '/browse';
+        }, 500);
       }
-
-      const user = result.user;
-
-      // Double-check the email domain
-      if (!userService.isLSBEmail(user.email!)) {
-        // Sign out the user if they're not from LSB domain
-        await signOut(auth);
-        throw new Error('Only @lsb.edu.ph email addresses are allowed');
-      }
-
-      // Create or update user profile in Firestore with displayName
-      await userService.createUserProfile(user, {
-        displayName: user.displayName || user.email?.split('@')[0] || 'User',
-      });
-      
-      // Load the user profile
-      const profile = await userService.getUserProfile(user.uid);
-      setUserProfile(profile);
-      
-      toast.success('Logged in with Google successfully!');
     } catch (error: any) {
+      console.error('❌ [LOGIN] Google sign-in error:', error);
+      console.error('❌ [LOGIN] Error message:', error.message);
+      console.error('❌ [LOGIN] Error code:', error.code);
+      console.error('❌ [LOGIN] Error stack:', error.stack);
+      pwaDebug.log('❌ Google sign-in error: ' + error.message);
+      pwaDebug.log('Code: ' + (error.code || 'none'));
+      
+      let errorMessage = 'Failed to sign in';
       if (error.code === 'auth/popup-closed-by-user') {
-        toast.error('Sign-in cancelled');
-      } else if (error.message.includes('lsb.edu.ph')) {
-        toast.error('Only @lsb.edu.ph accounts are allowed');
-      } else {
-        console.error('[Auth] Google sign-in error:', error);
-        toast.error('Failed to sign in with Google');
+        errorMessage = 'Sign-in cancelled';
+      } else if (error.code === 'auth/popup-blocked') {
+        errorMessage = 'Popup blocked';
+      } else if (error.code === 'auth/unauthorized-domain') {
+        errorMessage = 'Domain not authorized';
       }
+      
+      toast.error(errorMessage);
       throw error;
     }
   };
@@ -318,6 +401,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
+      {redirectProcessing && (
+        <div className="fixed inset-0 z-[10000] bg-black/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 max-w-md mx-4 text-center">
+            <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <h2 className="text-white text-xl font-semibold mb-2">Setting up your account</h2>
+            <p className="text-gray-300 text-sm">Please wait...</p>
+          </div>
+        </div>
+      )}
       {!loading && children}
     </AuthContext.Provider>
   );

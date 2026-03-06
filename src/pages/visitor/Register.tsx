@@ -125,7 +125,7 @@ export default function RegisterPage() {
     try {
       console.log('Verifying OTP:', enteredOTP, 'for email:', formData.email)
       
-      // Verify OTP using email service
+      // Verify OTP using email service (now synchronous)
       const result = emailService.verifyOTP(formData.email, enteredOTP)
       
       console.log('OTP verification result:', result)

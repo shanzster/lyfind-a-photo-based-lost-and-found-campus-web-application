@@ -63,8 +63,15 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
     }
 
     // Get FCM token
+    const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+    
+    if (!vapidKey) {
+      console.error('[FCM] VAPID key not configured');
+      return null;
+    }
+
     const token = await getToken(messaging, {
-      vapidKey: 'YOUR_VAPID_KEY_HERE' // You need to generate this in Firebase Console
+      vapidKey: vapidKey
     });
 
     if (token) {
@@ -97,22 +104,23 @@ export const onForegroundMessage = (callback: (payload: any) => void) => {
   });
 };
 
-// Save FCM token to Firestore
+// Save FCM token to Firestore (in users collection)
 export const saveFCMToken = async (userId: string, token: string) => {
   try {
-    const { doc, setDoc, arrayUnion } = await import('firebase/firestore');
+    const { doc, setDoc, arrayUnion, Timestamp } = await import('firebase/firestore');
     const { db } = await import('./firebase');
 
+    // Save to users collection (used by notification server)
     await setDoc(
       doc(db, 'users', userId),
       {
         fcmTokens: arrayUnion(token),
-        lastTokenUpdate: new Date()
+        lastTokenUpdate: Timestamp.now()
       },
       { merge: true }
     );
 
-    console.log('[FCM] Token saved to Firestore');
+    console.log('[FCM] Token saved to Firestore users collection');
   } catch (error) {
     console.error('[FCM] Error saving token:', error);
   }

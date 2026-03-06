@@ -6,7 +6,7 @@ import { getAnalytics } from 'firebase/analytics';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCvYOueHYtbbQm9NYNXQxzRhzOGkSWXDLw",
-  authDomain: "lyfind-72845.firebaseapp.com",
+  authDomain: "lyfind-72845.web.app",
   projectId: "lyfind-72845",
   storageBucket: "lyfind-72845.firebasestorage.app",
   messagingSenderId: "153935340746",
@@ -22,7 +22,8 @@ export const auth = getAuth(app);
 
 // Set auth persistence - use IndexedDB for better PWA support
 // IndexedDB works better than localStorage in PWA standalone mode
-setPersistence(auth, indexedDBLocalPersistence)
+// Exported so AuthContext can await this before doing auth operations
+export const authReady = setPersistence(auth, indexedDBLocalPersistence)
   .then(() => {
     console.log('[Firebase] Auth persistence set to IndexedDB');
   })
@@ -30,6 +31,9 @@ setPersistence(auth, indexedDBLocalPersistence)
     console.error('[Firebase] Error setting IndexedDB persistence, falling back to localStorage:', error);
     // Fallback to localStorage if IndexedDB fails
     return setPersistence(auth, browserLocalPersistence);
+  })
+  .then(() => {
+    console.log('[Firebase] Auth persistence ready');
   })
   .catch((error) => {
     console.error('[Firebase] Error setting auth persistence:', error);

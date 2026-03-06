@@ -1,6 +1,18 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // OTPs collection - allow unauthenticated access for registration
+    match /otps/{email} {
+      // Allow anyone to create OTP (for registration)
+      allow create: if true;
+      
+      // Allow anyone to read OTP (for verification)
+      allow read: if true;
+      
+      // Allow anyone to delete OTP (after verification)
+      allow delete: if true;
+    }
+    
     // Notifications - users can only access their own
     match /notifications/{notificationId} {
       // Users can read their own notifications
