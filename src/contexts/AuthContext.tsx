@@ -4,6 +4,8 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
@@ -56,6 +58,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, []);
 
+  // Handle redirect result from Google Sign-In (for PWA)
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        
+        if (result) {
+          const user = result.user;
+          console.log('[Auth] Redirect result received:', user.email);
+
+          // Double-check the email domain
+          if (!userService.isLSBEmail(user.email!)) {
+            await signOut(auth);
+            toast.error('Only @lsb.edu.ph accounts are allowed');
+            return;
+          }
+
+          // Create or update user profile
+          await userService.createUserProfile(user, {
+            displayName: user.displayName || user.email?.split('@')[0] || 'User',
+          });
+          
+          // Load the user profile
+          const profile = await userService.getUserProfile(user.uid);
+          setUserProfile(profile);
+          
+          toast.success('Logged in with Google successfully!');
+        }
+      } catch (error: any) {
+        console.error('[Auth] Redirect result error:', error);
+        if (error.message?.includes('lsb.edu.ph')) {
+          toast.error('Only @lsb.edu.ph accounts are allowed');
+        } else if (error.code !== 'auth/popup-closed-by-user') {
+          toast.error('Failed to sign in with Google');
+        }
+      }
+    };
+
+    handleRedirectResult();
+  }, []);
+
   const signup = async (email: string, password: string, name: string) => {
     // Check if email is from LSB domain
     if (!userService.isLSBEmail(email)) {
@@ -100,7 +143,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     try {
-      const result = await signInWithPopup(auth, provider);
+      // Check if running in PWA standalone mode
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                          (window.navigator as any).standalone === true;
+
+      let result;
+      
+      if (isStandalone) {
+        // Use redirect for PWA (popups don't work in standalone mode)
+        console.log('[Auth] PWA detected, using redirect flow');
+        await signInWithRedirect(auth, provider);
+        // The redirect will happen, and we'll handle the result in useEffect
+        return;
+      } else {
+        // Use popup for web browsers
+        console.log('[Auth] Browser detected, using popup flow');
+        result = await signInWithPopup(auth, provider);
+      }
+
       const user = result.user;
 
       // Double-check the email domain
@@ -126,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else if (error.message.includes('lsb.edu.ph')) {
         toast.error('Only @lsb.edu.ph accounts are allowed');
       } else {
+        console.error('[Auth] Google sign-in error:', error);
         toast.error('Failed to sign in with Google');
       }
       throw error;
