@@ -70,28 +70,36 @@ const messaging = admin.messaging();
 
 // Helper function to send push notification
 async function sendPushNotification(userId, notification) {
+  console.log('🔔 [NEWLY UPDATED] === SENDING PUSH NOTIFICATION ===');
+  console.log('👤 [NEWLY UPDATED] User ID:', userId);
+  console.log('📧 [NEWLY UPDATED] Title:', notification.title);
+  console.log('💬 [NEWLY UPDATED] Message:', notification.message);
+  
   try {
     // Get user's FCM tokens
     const userDoc = await db.collection('users').doc(userId).get();
     
     if (!userDoc.exists) {
-      console.log(`User ${userId} not found`);
+      console.log(`❌ [NEWLY UPDATED] User ${userId} not found`);
       return { success: false, error: 'User not found' };
     }
 
     const userData = userDoc.data();
     const fcmTokens = userData.fcmTokens || [];
 
+    console.log(`🔑 [NEWLY UPDATED] Found ${fcmTokens.length} FCM token(s) for user ${userId}`);
+    
     if (fcmTokens.length === 0) {
-      console.log(`No FCM tokens for user ${userId}`);
+      console.log(`❌ [NEWLY UPDATED] No FCM tokens for user ${userId}`);
       return { success: false, error: 'No FCM tokens' };
     }
 
-    console.log(`📤 Sending notification to ${fcmTokens.length} device(s) for user ${userId}`);
+    console.log(`📤 [NEWLY UPDATED] Sending notification to ${fcmTokens.length} device(s) for user ${userId}`);
 
     // Send to all user's devices
     const results = await Promise.allSettled(
-      fcmTokens.map(async (token) => {
+      fcmTokens.map(async (token, index) => {
+        console.log(`📱 [NEWLY UPDATED] Sending to device ${index + 1}/${fcmTokens.length}`);
         try {
           const response = await messaging.send({
             token,
@@ -116,13 +124,16 @@ async function sendPushNotification(userId, notification) {
             },
           });
 
-          console.log(`✅ Notification sent successfully:`, response);
+          console.log(`✅ [NEWLY UPDATED] Notification sent successfully to device ${index + 1}:`, response);
           return { success: true, messageId: response };
         } catch (error) {
+          console.error(`❌ [NEWLY UPDATED] Failed to send to device ${index + 1}:`, error.message);
+          console.error(`❌ [NEWLY UPDATED] Error code:`, error.code);
+          
           // Handle invalid tokens
           if (error.code === 'messaging/invalid-registration-token' ||
               error.code === 'messaging/registration-token-not-registered') {
-            console.log(`🗑️ Removing invalid token for user ${userId}`);
+            console.log(`🗑️ [NEWLY UPDATED] Removing invalid token for user ${userId}`);
             // Remove invalid token
             await db.collection('users').doc(userId).update({
               fcmTokens: admin.firestore.FieldValue.arrayRemove(token),
@@ -136,7 +147,7 @@ async function sendPushNotification(userId, notification) {
     const successful = results.filter(r => r.status === 'fulfilled').length;
     const failed = results.filter(r => r.status === 'rejected').length;
 
-    console.log(`📊 Notification results: ${successful} sent, ${failed} failed`);
+    console.log(`📊 [NEWLY UPDATED] Notification results: ${successful} sent, ${failed} failed`);
 
     return {
       success: successful > 0,
@@ -145,33 +156,42 @@ async function sendPushNotification(userId, notification) {
       results,
     };
   } catch (error) {
-    console.error('❌ Error sending push notification:', error);
+    console.error('❌ [NEWLY UPDATED] Error sending push notification:', error);
     return { success: false, error: error.message };
   }
 }
 
 // API endpoint to send notification
 app.post('/api/send-notification', async (req, res) => {
+  console.log('🆕 [NEWLY UPDATED] Received notification request');
+  console.log('📥 [NEWLY UPDATED] Request body:', JSON.stringify(req.body, null, 2));
+  console.log('🔑 [NEWLY UPDATED] API Secret provided:', req.headers['x-api-secret'] ? 'Yes' : 'No');
+  
   try {
     const { userId, title, message, actionUrl, type, notificationId } = req.body;
 
     // Validate required fields
     if (!userId || !title || !message) {
+      console.log('❌ [NEWLY UPDATED] Missing required fields');
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: userId, title, message',
       });
     }
 
+    console.log('✅ [NEWLY UPDATED] All required fields present');
+
     // Optional: Verify API secret for security
     const apiSecret = req.headers['x-api-secret'];
     if (process.env.API_SECRET && apiSecret !== process.env.API_SECRET) {
+      console.log('❌ [NEWLY UPDATED] Unauthorized - API secret mismatch');
       return res.status(401).json({
         success: false,
         error: 'Unauthorized',
       });
     }
 
+    console.log('🚀 [NEWLY UPDATED] Calling sendPushNotification for user:', userId);
     const result = await sendPushNotification(userId, {
       title,
       message,
@@ -180,9 +200,10 @@ app.post('/api/send-notification', async (req, res) => {
       notificationId,
     });
 
+    console.log('📤 [NEWLY UPDATED] Push notification result:', JSON.stringify(result, null, 2));
     res.json(result);
   } catch (error) {
-    console.error('Error in /api/send-notification:', error);
+    console.error('❌ [NEWLY UPDATED] Error in /api/send-notification:', error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -266,9 +287,13 @@ app.get('/', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Notification server running on port ${PORT}`);
-  console.log(`📍 Health check: http://localhost:${PORT}/health`);
-  console.log(`📍 API endpoint: http://localhost:${PORT}/api/send-notification`);
+  console.log('🆕 ========================================');
+  console.log('🆕 [NEWLY UPDATED] NOTIFICATION SERVER');
+  console.log('🆕 ========================================');
+  console.log(`🚀 [NEWLY UPDATED] Server running on port ${PORT}`);
+  console.log(`📍 [NEWLY UPDATED] Health check: http://localhost:${PORT}/health`);
+  console.log(`📍 [NEWLY UPDATED] API endpoint: http://localhost:${PORT}/api/send-notification`);
+  console.log('🆕 ========================================');
 });
 
 // Graceful shutdown
