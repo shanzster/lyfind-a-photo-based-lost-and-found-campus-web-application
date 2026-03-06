@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import Image from 'next/image';
 import { FloorPlan } from '@/lib/floorPlans';
 
 interface Marker {

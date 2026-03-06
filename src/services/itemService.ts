@@ -7,7 +7,6 @@ import {
   query,
   where,
   orderBy,
-  limit,
   updateDoc,
   deleteDoc,
   Timestamp,
@@ -35,6 +34,12 @@ export interface Item {
   userEmail: string;
   userPhotoURL?: string;
   status: 'active' | 'resolved' | 'archived';
+  claimedBy?: string;
+  claimedAt?: Timestamp;
+  meetupLocation?: {
+    name: string;
+    coordinates?: { lat: number; lng: number };
+  };
   contactInfo?: {
     email?: string;
     phone?: string;

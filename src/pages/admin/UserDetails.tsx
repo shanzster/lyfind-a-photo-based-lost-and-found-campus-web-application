@@ -25,8 +25,6 @@ export default function UserDetails() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showSuspendModal, setShowSuspendModal] = useState(false);
   const [showBanModal, setShowBanModal] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [suspendReason, setSuspendReason] = useState('');
   const [suspendDuration, setSuspendDuration] = useState(7);
   const [banReason, setBanReason] = useState('');
@@ -684,8 +682,8 @@ export default function UserDetails() {
                   <button
                     onClick={() => {
                       setShowPasswordModal(false);
-                      setNewPassword('');
-                      setConfirmPassword('');
+                      // setNewPassword('');
+                      // setConfirmPassword('');
                     }}
                     className="flex-1 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all"
                   >

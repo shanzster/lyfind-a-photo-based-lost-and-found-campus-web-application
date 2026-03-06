@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { AdminAuthProvider, useAdminAuth } from '@/contexts/AdminAuthContext';
+import { PushNotificationSetup } from '@/components/PushNotificationSetup';
 import Header from '@/components/header';
 
 // Visitor pages
@@ -26,6 +27,9 @@ import PhotoMatchPage from '@/pages/lycean/PhotoMatch';
 import DiagnosticTest from '@/pages/lycean/DiagnosticTest';
 import MyItemsPage from '@/pages/lycean/MyItems';
 import NotificationsPage from '@/pages/lycean/Notifications';
+
+// Public pages
+import PublicItemPage from '@/pages/public/PublicItem';
 
 // Faculty pages
 import FacultyLoginPage from '@/pages/faculty/FacultyLogin';
@@ -87,6 +91,7 @@ export default function App() {
     <ThemeProvider defaultTheme="system" storageKey="ui-theme">
       <AuthProvider>
         <NotificationProvider>
+          <PushNotificationSetup />
           <div className="min-h-screen bg-background">
             {shouldShowHeader && <Header />}
             <Routes>
@@ -99,6 +104,9 @@ export default function App() {
               <Route path="/services" element={<ServicesPage />} />
               <Route path="/developer" element={<DeveloperPage />} />
               <Route path="/institution" element={<InstitutionPage />} />
+              
+              {/* Public Routes */}
+              <Route path="/public/item/:id" element={<PublicItemPage />} />
               
               {/* Lycean Routes */}
               <Route path="/browse" element={<BrowsePage />} />

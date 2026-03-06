@@ -48,7 +48,8 @@ export async function autoMatchNewItem(itemId: string, itemData: Item): Promise<
     
     // Find matches with threshold of 70
     console.log('[AutoMatch] Finding matches...');
-    const matches = findMatches(features, itemsWithFeatures, 70);
+    const validItems = itemsWithFeatures.filter((item): item is typeof item & { id: string } => !!item.id);
+    const matches = findMatches(features, validItems, 70);
     
     console.log('[AutoMatch] Found', matches.length, 'matches');
     

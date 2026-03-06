@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, Trash2, Edit, Eye, CheckCircle, Package, MapPin, Calendar } from 'lucide-react';
+import { Search, Filter, Trash2, Eye, Package, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';

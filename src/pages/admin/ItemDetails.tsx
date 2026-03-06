@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, Package, MapPin, Calendar, User, Eye, MessageSquare, 
-  Trash2, CheckCircle, XCircle, Edit, Flag, Clock, Image as ImageIcon
+  ArrowLeft, Package, MapPin, Calendar, Eye, MessageSquare, 
+  Trash2, CheckCircle, XCircle, Clock, Image as ImageIcon
 } from 'lucide-react';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
@@ -46,7 +46,7 @@ export default function ItemDetails() {
         return;
       }
 
-      const itemData = { id: itemDoc.id, ...itemDoc.data() };
+      const itemData: any = { id: itemDoc.id, ...itemDoc.data() };
       setItem(itemData);
 
       // Get user info

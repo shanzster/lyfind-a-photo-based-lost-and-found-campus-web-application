@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, LogOut, Sparkles, Package, MessageSquare, User, Loader2, Edit } from 'lucide-react';
+import { ArrowLeft, LogOut, Sparkles, Package, MessageSquare, Loader2, Edit, Camera } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { itemService } from '@/services/itemService';
 import { userService } from '@/services/userService';
+import { storageService } from '@/services/storageService';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 import { toast } from 'sonner';
 
@@ -13,7 +14,9 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const { user, userProfile, logout } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
-  const [userItems, setUserItems] = useState<any[]>([]);
+  // const [userItems, setUserItems] = useState<any[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [stats, setStats] = useState({
     totalItems: 0,
     activeItems: 0,
@@ -49,7 +52,7 @@ export default function ProfilePage() {
       const items = await itemService.getUserItems(user.uid);
       console.log('[Profile] Fetched user items:', items.length);
       console.log('[Profile] Items:', items);
-      setUserItems(items);
+      // setUserItems(items);
 
       // Calculate stats
       const activeItems = items.filter(item => item.status === 'active').length;
@@ -88,6 +91,42 @@ export default function ProfilePage() {
     if (!timestamp) return 'N/A';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB');
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      // Upload to Cloudinary
+      const photoURL = await storageService.uploadToCloudinary(file);
+
+      // Update user profile in Firestore
+      await userService.updateUserProfile(user.uid, { photoURL });
+
+      toast.success('Profile picture updated!');
+      
+      // Reload page to show new photo
+      window.location.reload();
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      toast.error('Failed to upload photo');
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   if (isLoading) {
@@ -164,12 +203,47 @@ export default function ProfilePage() {
         {/* Profile Info */}
         <Card className="border-border bg-card p-8">
           <div className="flex items-center gap-6 mb-8">
-            <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-              {userProfile?.photoURL ? (
-                <img src={userProfile.photoURL} alt={userProfile.displayName} className="w-full h-full object-cover" />
-              ) : (
-                <User className="h-10 w-10 text-primary" />
-              )}
+            <div className="relative">
+              <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                {userProfile?.photoURL ? (
+                  <img 
+                    src={userProfile.photoURL} 
+                    alt={userProfile.displayName} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to UI Avatars if image fails to load
+                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(userProfile.displayName)}&background=ff7400&color=fff&size=128`;
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(userProfile?.displayName || 'User')}&background=ff7400&color=fff&size=128`}
+                    alt={userProfile?.displayName || 'User'}
+                    className="w-full h-full object-cover"
+                  />
+                )}
+              </div>
+              
+              {/* Upload Button Overlay */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoUpload}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPhoto}
+                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center transition-all shadow-lg disabled:opacity-50"
+                title="Change profile picture"
+              >
+                {uploadingPhoto ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Camera className="w-4 h-4" />
+                )}
+              </button>
             </div>
             <div>
               <h2 className="text-2xl font-bold text-foreground">{userProfile?.displayName || 'User'}</h2>

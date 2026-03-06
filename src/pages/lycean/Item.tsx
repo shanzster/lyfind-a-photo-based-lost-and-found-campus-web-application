@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, MapPin, Clock, Eye, Share2, Flag, Calendar, MessageCircle, X, CheckCircle, Loader2, Image as ImageIcon } from 'lucide-react'
+import { ArrowLeft, MapPin, Clock, Share2, MessageCircle, CheckCircle, Loader2, Image as ImageIcon } from 'lucide-react'
 import LyceanSidebar from '@/components/lycean-sidebar'
 import { itemService, Item } from '@/services/itemService'
 import { userService } from '@/services/userService'
@@ -304,13 +304,17 @@ export default function ItemPage() {
                       src={item.userPhotoURL}
                       alt={item.userName}
                       className="w-16 h-16 rounded-full bg-white/10 ring-2 ring-white/20 object-cover"
+                      onError={(e) => {
+                        // Fallback to UI Avatars if image fails to load
+                        e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.userName)}&background=ff7400&color=fff&size=128`;
+                      }}
                     />
                   ) : (
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#ff7400]/20 to-purple-500/20 ring-2 ring-white/20 flex items-center justify-center">
-                      <span className="text-white text-xl font-medium">
-                        {item.userName.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
+                    <img
+                      src={`https://ui-avatars.com/api/?name=${encodeURIComponent(item.userName)}&background=ff7400&color=fff&size=128`}
+                      alt={item.userName}
+                      className="w-16 h-16 rounded-full bg-white/10 ring-2 ring-white/20 object-cover"
+                    />
                   )}
                   <div className="flex-1">
                     <h4 className="text-white font-medium text-lg">{item.userName}</h4>
@@ -354,8 +358,9 @@ export default function ItemPage() {
                       )}
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText(window.location.href)
-                          toast.success('Link copied to clipboard!')
+                          const publicUrl = `${window.location.origin}/public/item/${item.id}`
+                          navigator.clipboard.writeText(publicUrl)
+                          toast.success('Public link copied to clipboard!')
                         }}
                         className="w-full px-6 py-4 backdrop-blur-xl bg-white/10 border border-white/20 text-white rounded-2xl font-medium hover:bg-white/20 transition-all flex items-center justify-center gap-2"
                       >

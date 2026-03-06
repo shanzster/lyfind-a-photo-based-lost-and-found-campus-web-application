@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Send, ArrowLeft, Loader2, MessageCircle, Package, Flag, X, AlertTriangle } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Send, ArrowLeft, Loader2, MessageCircle, Package, Flag, X, AlertTriangle, Paperclip, MapPin, CheckCircle } from 'lucide-react';
 import LyceanSidebar from '@/components/lycean-sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { messageService, Conversation, Message } from '@/services/messageService';
 import { reportService } from '@/services/reportService';
+import { storageService } from '@/services/storageService';
+// import { itemService } from '@/services/itemService';
+import { floorPlans, getFloorPlan } from '@/lib/floorPlans';
 import { toast } from 'sonner';
 
 export default function MessagesPage() {
@@ -22,6 +25,16 @@ export default function MessagesPage() {
   const [reportCategory, setReportCategory] = useState<'inappropriate' | 'spam' | 'fraud' | 'harassment' | 'other'>('harassment');
   const [reportDescription, setReportDescription] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [meetupLocation, setMeetupLocation] = useState('');
+  const [claimingItem, setClaimingItem] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [selectedFloorPlan, setSelectedFloorPlan] = useState(floorPlans[0].id);
+  const [locationPin, setLocationPin] = useState<{ x: number; y: number } | null>(null);
+  const [roomNumber, setRoomNumber] = useState('');
 
   // Get conversation ID from navigation state
   const targetConversationId = (location.state as any)?.conversationId;
@@ -80,23 +93,50 @@ export default function MessagesPage() {
   }, [selectedConversation, user]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedConversation || !user) return;
+    if ((!newMessage.trim() && selectedImages.length === 0 && !locationPin) || !selectedConversation || !user) return;
 
     setSending(true);
     try {
+      let imageUrls: string[] = [];
+      
+      // Upload images if any
+      if (selectedImages.length > 0) {
+        setUploadingImages(true);
+        imageUrls = await storageService.uploadItemPhotos(selectedImages);
+        setUploadingImages(false);
+      }
+
+      // Prepare location data if pin is set
+      let locationData: { floorPlanId: string; x: number; y: number; roomNumber?: string } | undefined;
+      if (locationPin) {
+        locationData = {
+          floorPlanId: selectedFloorPlan,
+          x: locationPin.x,
+          y: locationPin.y,
+          roomNumber: roomNumber || undefined,
+        };
+      }
+
       await messageService.sendMessage(
         selectedConversation.id!,
         user.uid,
         user.displayName || 'User',
-        newMessage.trim(),
-        user.photoURL || undefined
+        newMessage.trim() || (locationPin ? '📍 Location' : '📷 Image'),
+        user.photoURL || undefined,
+        imageUrls.length > 0 ? imageUrls : undefined,
+        locationData
       );
+      
       setNewMessage('');
+      setSelectedImages([]);
+      setLocationPin(null);
+      setRoomNumber('');
     } catch (error) {
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
     } finally {
       setSending(false);
+      setUploadingImages(false);
     }
   };
 
@@ -151,6 +191,61 @@ export default function MessagesPage() {
     } finally {
       setSubmittingReport(false)
     }
+  };
+
+  const handleClaimItem = async () => {
+    if (!user || !selectedConversation || !meetupLocation.trim()) {
+      toast.error('Please provide a meetup location');
+      return;
+    }
+
+    setClaimingItem(true);
+    try {
+      await messageService.markItemAsClaimed(
+        selectedConversation.id!,
+        selectedConversation.itemId,
+        user.uid,
+        { name: meetupLocation.trim() }
+      );
+
+      toast.success('Item marked as claimed!');
+      setShowClaimModal(false);
+      setMeetupLocation('');
+    } catch (error) {
+      console.error('Error claiming item:', error);
+      toast.error('Failed to mark item as claimed');
+    } finally {
+      setClaimingItem(false);
+    }
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length + selectedImages.length > 5) {
+      toast.error('Maximum 5 images allowed');
+      return;
+    }
+    setSelectedImages([...selectedImages, ...files]);
+  };
+
+  const removeSelectedImage = (index: number) => {
+    setSelectedImages(selectedImages.filter((_, i) => i !== index));
+  };
+
+  const handleFloorPlanClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    setLocationPin({ x, y });
+  };
+
+  const handleSendLocation = () => {
+    if (!locationPin) {
+      toast.error('Please select a location on the map');
+      return;
+    }
+    setShowLocationModal(false);
+    // Location will be sent when user clicks send button
   };
 
   const handleSelectConversation = (conv: Conversation) => {
@@ -245,11 +340,17 @@ export default function MessagesPage() {
                               src={otherUser.photo}
                               alt={otherUser.name}
                               className="w-full h-full object-cover"
+                              onError={(e) => {
+                                // Fallback to UI Avatars if image fails to load
+                                e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(otherUser.name)}&background=ff7400&color=fff&size=128`;
+                              }}
                             />
                           ) : (
-                            <span className="text-white font-medium">
-                              {otherUser.name.charAt(0).toUpperCase()}
-                            </span>
+                            <img
+                              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(otherUser.name)}&background=ff7400&color=fff&size=128`}
+                              alt={otherUser.name}
+                              className="w-full h-full object-cover"
+                            />
                           )}
                         </div>
 
@@ -301,11 +402,17 @@ export default function MessagesPage() {
                           src={getOtherParticipant(selectedConversation).photo}
                           alt={getOtherParticipant(selectedConversation).name}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // Fallback to UI Avatars if image fails to load
+                            e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(getOtherParticipant(selectedConversation).name)}&background=ff7400&color=fff&size=128`;
+                          }}
                         />
                       ) : (
-                        <span className="text-white font-medium">
-                          {getOtherParticipant(selectedConversation).name.charAt(0).toUpperCase()}
-                        </span>
+                        <img
+                          src={`https://ui-avatars.com/api/?name=${encodeURIComponent(getOtherParticipant(selectedConversation).name)}&background=ff7400&color=fff&size=128`}
+                          alt={getOtherParticipant(selectedConversation).name}
+                          className="w-full h-full object-cover"
+                        />
                       )}
                     </div>
 
@@ -358,36 +465,113 @@ export default function MessagesPage() {
                       <p className="text-xs text-white/60">Click to view item details</p>
                     </div>
                   </Link>
+
+                  {/* Claim Button - Only show to item owner */}
+                  {selectedConversation.participants[0] === user.uid && (
+                    <button
+                      onClick={() => setShowClaimModal(true)}
+                      className="w-full mt-3 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-all flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Mark as Claimed
+                    </button>
+                  )}
+                </div>
+
+                {/* Admin Monitoring Disclaimer */}
+                <div className="px-4 py-2 bg-yellow-500/10 border-b border-yellow-500/20">
+                  <p className="text-yellow-200/90 text-xs flex items-center gap-2">
+                    <AlertTriangle className="w-3 h-3" />
+                    Admin monitors all conversations for safety and security
+                  </p>
                 </div>
 
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {messages.map((message) => {
                     const isOwn = message.senderId === user.uid;
+                    const isSystem = message.senderId === 'system';
 
                     return (
                       <div
                         key={message.id}
-                        className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                        className={`flex ${isSystem ? 'justify-center' : isOwn ? 'justify-end' : 'justify-start'}`}
                       >
                         <div
-                          className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl ${
-                            isOwn
+                          className={`${isSystem ? 'max-w-md' : 'max-w-xs lg:max-w-md'} px-4 py-3 rounded-2xl ${
+                            isSystem
+                              ? 'bg-blue-500/20 text-blue-200 text-center text-sm'
+                              : isOwn
                               ? 'bg-[#ff7400] text-white'
                               : 'bg-white/10 text-white'
                           }`}
                         >
-                          <p className="text-sm break-words">{message.content}</p>
-                          <p
-                            className={`text-xs mt-1 ${
-                              isOwn ? 'text-white/70' : 'text-white/50'
-                            }`}
-                          >
-                            {message.createdAt.toDate().toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </p>
+                          {message.content && <p className="text-sm break-words">{message.content}</p>}
+                          
+                          {/* Display images if any */}
+                          {message.images && message.images.length > 0 && (
+                            <div className={`grid gap-2 ${message.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} ${message.content ? 'mt-2' : ''}`}>
+                              {message.images.map((imageUrl, idx) => (
+                                <img
+                                  key={idx}
+                                  src={imageUrl}
+                                  alt={`Attachment ${idx + 1}`}
+                                  className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                                  onClick={() => window.open(imageUrl, '_blank')}
+                                />
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Display location if any */}
+                          {message.location && (
+                            <div className={`${message.content || message.images ? 'mt-2' : ''}`}>
+                              <div className="relative aspect-video rounded-lg overflow-hidden bg-[#1a0d1c] border border-white/10">
+                                <img
+                                  src={getFloorPlan(message.location.floorPlanId)?.imageUrl || '/floor-plans/ground_floor.png'}
+                                  alt="Floor Plan"
+                                  className="w-full h-full object-contain"
+                                />
+                                {/* Location Pin */}
+                                <div
+                                  className="absolute transform -translate-x-1/2 -translate-y-1/2 z-20 animate-bounce"
+                                  style={{
+                                    left: `${message.location.x}%`,
+                                    top: `${message.location.y}%`,
+                                  }}
+                                >
+                                  <div className="relative">
+                                    <div className="absolute inset-0 rounded-full bg-[#ff7400] animate-ping opacity-75"></div>
+                                    <div className="relative w-8 h-8 rounded-full bg-[#ff7400] border-2 border-white shadow-2xl flex items-center justify-center">
+                                      <MapPin className="w-4 h-4 text-white" />
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* Room label */}
+                                {message.location.roomNumber && (
+                                  <div className="absolute bottom-2 left-2 right-2 backdrop-blur-xl bg-white/10 border border-white/20 rounded-lg p-2">
+                                    <p className="text-white font-medium text-xs text-center">{message.location.roomNumber}</p>
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-xs mt-1 opacity-70">
+                                📍 {getFloorPlan(message.location.floorPlanId)?.name || 'Campus Location'}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {!isSystem && (
+                            <p
+                              className={`text-xs mt-1 ${
+                                isOwn ? 'text-white/70' : 'text-white/50'
+                              }`}
+                            >
+                              {message.createdAt.toDate().toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </p>
+                          )}
                         </div>
                       </div>
                     );
@@ -397,7 +581,99 @@ export default function MessagesPage() {
 
                 {/* Message Input */}
                 <div className="p-4 border-t border-white/10 bg-[#2f1632]">
+                  {/* Image Previews */}
+                  {selectedImages.length > 0 && (
+                    <div className="mb-3 flex gap-2 flex-wrap">
+                      {selectedImages.map((file, idx) => (
+                        <div key={idx} className="relative">
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={`Preview ${idx + 1}`}
+                            className="w-20 h-20 rounded-lg object-cover"
+                          />
+                          <button
+                            onClick={() => removeSelectedImage(idx)}
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                          >
+                            <X className="w-4 h-4 text-white" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Location Preview */}
+                  {locationPin && (
+                    <div className="mb-3">
+                      <div className="relative aspect-video rounded-lg overflow-hidden bg-[#1a0d1c] border border-[#ff7400]/50">
+                        <img
+                          src={getFloorPlan(selectedFloorPlan)?.imageUrl || '/floor-plans/ground_floor.png'}
+                          alt="Floor Plan"
+                          className="w-full h-full object-contain"
+                        />
+                        <div
+                          className="absolute transform -translate-x-1/2 -translate-y-1/2 z-20"
+                          style={{
+                            left: `${locationPin.x}%`,
+                            top: `${locationPin.y}%`,
+                          }}
+                        >
+                          <div className="w-6 h-6 rounded-full bg-[#ff7400] border-2 border-white shadow-lg flex items-center justify-center">
+                            <MapPin className="w-3 h-3 text-white" />
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setLocationPin(null);
+                            setRoomNumber('');
+                          }}
+                          className="absolute top-2 right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                        >
+                          <X className="w-4 h-4 text-white" />
+                        </button>
+                        {roomNumber && (
+                          <div className="absolute bottom-2 left-2 right-2 backdrop-blur-xl bg-white/10 border border-white/20 rounded-lg p-1">
+                            <p className="text-white font-medium text-xs text-center">{roomNumber}</p>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/60 mt-1">📍 {getFloorPlan(selectedFloorPlan)?.name}</p>
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
+                    {/* Image Upload Button */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageSelect}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={sending || uploadingImages}
+                      className="p-3 bg-white/5 border border-white/10 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-50"
+                      title="Attach images"
+                    >
+                      <Paperclip className="w-5 h-5" />
+                    </button>
+
+                    {/* Location Pin Button */}
+                    <button
+                      onClick={() => setShowLocationModal(true)}
+                      disabled={sending || uploadingImages}
+                      className={`p-3 border rounded-xl transition-all disabled:opacity-50 ${
+                        locationPin
+                          ? 'bg-[#ff7400] border-[#ff7400] text-white'
+                          : 'bg-white/5 border-white/10 text-white/60 hover:text-white hover:bg-white/10'
+                      }`}
+                      title="Share location"
+                    >
+                      <MapPin className="w-5 h-5" />
+                    </button>
+
                     <input
                       type="text"
                       value={newMessage}
@@ -409,15 +685,15 @@ export default function MessagesPage() {
                         }
                       }}
                       placeholder="Type your message..."
-                      disabled={sending}
+                      disabled={sending || uploadingImages}
                       className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-[#ff7400]/50 transition-all disabled:opacity-50"
                     />
                     <button
                       onClick={handleSendMessage}
-                      disabled={!newMessage.trim() || sending}
+                      disabled={(!newMessage.trim() && selectedImages.length === 0 && !locationPin) || sending || uploadingImages}
                       className="px-6 py-3 bg-[#ff7400] hover:bg-[#ff8500] text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                      {sending ? (
+                      {sending || uploadingImages ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
                       ) : (
                         <Send className="w-5 h-5" />
@@ -579,6 +855,209 @@ export default function MessagesPage() {
                     Submit Report
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Claim Item Modal */}
+      {showClaimModal && selectedConversation && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="backdrop-blur-xl bg-[#2f1632] border border-white/10 rounded-3xl max-w-lg w-full shadow-2xl p-8">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-green-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">Mark Item as Claimed</h3>
+                <p className="text-sm text-white/60">{selectedConversation.itemTitle}</p>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="space-y-4 mb-6">
+              <p className="text-white/70 text-sm">
+                Set a meetup location on campus where you'll hand over the item.
+              </p>
+
+              <div>
+                <label className="block text-white/70 text-sm mb-2 font-medium">
+                  <MapPin className="w-4 h-4 inline mr-1" />
+                  Meetup Location
+                </label>
+                <input
+                  type="text"
+                  value={meetupLocation}
+                  onChange={(e) => setMeetupLocation(e.target.value)}
+                  placeholder="e.g., Main Gate, Library Entrance, Cafeteria..."
+                  disabled={claimingItem}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-green-500/50 transition-all disabled:opacity-50"
+                />
+              </div>
+
+              <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                <p className="text-blue-200/90 text-sm">
+                  💡 Choose a public, well-lit location on campus for safety.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowClaimModal(false);
+                  setMeetupLocation('');
+                }}
+                disabled={claimingItem}
+                className="flex-1 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClaimItem}
+                disabled={claimingItem || !meetupLocation.trim()}
+                className="flex-1 px-6 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {claimingItem ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Claiming...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Confirm Claim
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Location Picker Modal */}
+      {showLocationModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="backdrop-blur-xl bg-[#2f1632] border border-white/10 rounded-3xl max-w-4xl w-full shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-[#ff7400]/20 flex items-center justify-center">
+                  <MapPin className="w-6 h-6 text-[#ff7400]" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Share Location</h3>
+                  <p className="text-sm text-white/60">Click on the map to set a pin</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowLocationModal(false);
+                  if (!locationPin) {
+                    setRoomNumber('');
+                  }
+                }}
+                className="w-10 h-10 rounded-full backdrop-blur-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            {/* Floor Plan Selector */}
+            <div className="mb-4">
+              <label className="block text-white/70 text-sm mb-2 font-medium">Select Floor</label>
+              <div className="flex gap-2 flex-wrap">
+                {floorPlans.map((plan) => (
+                  <button
+                    key={plan.id}
+                    onClick={() => {
+                      setSelectedFloorPlan(plan.id);
+                      setLocationPin(null);
+                    }}
+                    className={`px-4 py-2 rounded-xl font-medium transition-all ${
+                      selectedFloorPlan === plan.id
+                        ? 'bg-[#ff7400] text-white'
+                        : 'bg-white/5 text-white/70 border border-white/10 hover:bg-white/10'
+                    }`}
+                  >
+                    {plan.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Floor Plan Map */}
+            <div className="mb-4">
+              <div
+                className="relative aspect-video rounded-xl overflow-hidden bg-[#1a0d1c] border-2 border-white/10 cursor-crosshair hover:border-[#ff7400]/50 transition-all"
+                onClick={handleFloorPlanClick}
+              >
+                <img
+                  src={getFloorPlan(selectedFloorPlan)?.imageUrl || '/floor-plans/ground_floor.png'}
+                  alt="Floor Plan"
+                  className="w-full h-full object-contain pointer-events-none"
+                />
+                
+                {/* Location Pin */}
+                {locationPin && (
+                  <div
+                    className="absolute transform -translate-x-1/2 -translate-y-1/2 z-20 animate-bounce"
+                    style={{
+                      left: `${locationPin.x}%`,
+                      top: `${locationPin.y}%`,
+                    }}
+                  >
+                    <div className="relative">
+                      <div className="absolute inset-0 rounded-full bg-[#ff7400] animate-ping opacity-75"></div>
+                      <div className="relative w-10 h-10 rounded-full bg-[#ff7400] border-4 border-white shadow-2xl flex items-center justify-center">
+                        <MapPin className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-white/50 mt-2 text-center">
+                Click anywhere on the map to place your location pin
+              </p>
+            </div>
+
+            {/* Room Number Input */}
+            <div className="mb-6">
+              <label className="block text-white/70 text-sm mb-2 font-medium">
+                Room/Location Name (Optional)
+              </label>
+              <input
+                type="text"
+                value={roomNumber}
+                onChange={(e) => setRoomNumber(e.target.value)}
+                placeholder="e.g., Room 301, Library Entrance, Cafeteria..."
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/40 focus:outline-none focus:border-[#ff7400]/50 transition-all"
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowLocationModal(false);
+                  if (!locationPin) {
+                    setRoomNumber('');
+                  }
+                }}
+                className="flex-1 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendLocation}
+                disabled={!locationPin}
+                className="flex-1 px-6 py-3 rounded-xl bg-[#ff7400] hover:bg-[#ff8500] text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <MapPin className="w-4 h-4" />
+                Set Location
               </button>
             </div>
           </div>

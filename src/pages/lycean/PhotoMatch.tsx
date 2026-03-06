@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { Upload, Image as ImageIcon, Loader2, CheckCircle, XCircle, Clock, TrendingUp, AlertCircle, History } from 'lucide-react';
 import LyceanSidebar from '@/components/lycean-sidebar';
 import { photoMatchService, PhotoMatchRequest } from '@/services/photoMatchService';
-import { aiMatchingService, AIMatchResult } from '@/services/aiMatchingService';
+import { AIMatchResult } from '@/services/aiMatchingService';
 import { useAuth } from '@/contexts/AuthContext';
 import { onSnapshot, collection, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { toast } from 'sonner';
 
 export default function PhotoMatchPage() {
   const { user } = useAuth();
@@ -17,7 +18,7 @@ export default function PhotoMatchPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
-  const [showLimitModal, setShowLimitModal] = useState(false);
+  // const [showLimitModal, setShowLimitModal] = useState(false);
   const [remainingTime, setRemainingTime] = useState<string>('');
   const [usageCount, setUsageCount] = useState(0);
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -200,8 +201,10 @@ export default function PhotoMatchPage() {
             // Delete from Firestore after 2 seconds (enough time to show results)
             setTimeout(async () => {
               try {
-                await photoMatchService.deleteMatchRequest(request.id);
-                console.log('[PhotoMatch] Deleted completed request:', request.id);
+                if (request.id) {
+                  await photoMatchService.deleteMatchRequest(request.id);
+                  console.log('[PhotoMatch] Deleted completed request:', request.id);
+                }
               } catch (error) {
                 console.error('[PhotoMatch] Failed to delete request:', error);
               }
@@ -250,7 +253,8 @@ export default function PhotoMatchPage() {
 
     // Check usage limit
     if (usageCount >= 2) {
-      setShowLimitModal(true);
+      // setShowLimitModal(true);
+      toast.error('You have reached your daily limit of 2 photo matches');
       return;
     }
 
@@ -268,7 +272,7 @@ export default function PhotoMatchPage() {
     try {
       // Upload image to Firebase Storage
       console.log('[PhotoMatch] Uploading image to Firebase Storage...');
-      const imageUrl = await photoMatchService.uploadImage(selectedImage, user.uid);
+      const imageUrl = await photoMatchService.uploadImage(selectedImage);
       console.log('[PhotoMatch] Image uploaded:', imageUrl);
       
       // Create match request
@@ -623,9 +627,9 @@ export default function PhotoMatchPage() {
                 </div>
               ) : (
                 <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                  {queue.map((item, index) => {
+                  {queue.map((item) => {
                     const isCurrentUser = item.userId === user?.uid;
-                    const estimatedWait = index * 10; // 10 seconds per position
+                    // const estimatedWait = index * 10; // 10 seconds per position
                     
                     return (
                       <div 

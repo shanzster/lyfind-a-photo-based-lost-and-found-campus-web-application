@@ -8,7 +8,6 @@ import {
   where, 
   orderBy,
   Timestamp,
-  getDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
@@ -168,6 +167,35 @@ export const reportService = {
     } catch (error) {
       console.error('[ReportService] Error reviewing report:', error);
       throw error;
+    }
+  },
+
+  // Get all users who reported a specific item
+  async getItemReporters(itemId: string): Promise<Array<{ userId: string; userName: string }>> {
+    try {
+      const q = query(
+        collection(db, 'reports'),
+        where('itemId', '==', itemId)
+      );
+
+      const snapshot = await getDocs(q);
+      const reporters = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          userId: data.reportedBy,
+          userName: data.reporterName
+        };
+      });
+
+      // Remove duplicates
+      const uniqueReporters = Array.from(
+        new Map(reporters.map(r => [r.userId, r])).values()
+      );
+
+      return uniqueReporters;
+    } catch (error) {
+      console.error('[ReportService] Error getting item reporters:', error);
+      return [];
     }
   },
 

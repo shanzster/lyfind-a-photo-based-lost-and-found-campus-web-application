@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Search, MapPin, Eye, Mail, Clock, TrendingUp, X, Navigation, Loader2, Image as ImageIcon, Flag, AlertTriangle } from 'lucide-react'
+import { Search, MapPin, Eye, Mail, Clock, X, Loader2, Image as ImageIcon, Flag, AlertTriangle } from 'lucide-react'
 import LyceanSidebar from '@/components/lycean-sidebar'
 import { itemService, Item } from '@/services/itemService'
 import { userService } from '@/services/userService'
@@ -142,7 +142,7 @@ export default function BrowsePage() {
         item.userName,
         user.uid,
         userProfile.displayName || user.displayName || 'User',
-        userProfile.photoURL || user.photoURL,
+        userProfile.photoURL || user.photoURL || undefined,
         item.userPhotoURL
       )
 

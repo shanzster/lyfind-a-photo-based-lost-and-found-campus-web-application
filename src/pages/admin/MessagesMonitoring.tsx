@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageSquare, Flag, Eye, CheckCircle, XCircle, Clock, User, AlertTriangle, Loader2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { MessageSquare, Eye, CheckCircle, XCircle, Clock, AlertTriangle, Loader2, User } from 'lucide-react';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { reportService, Report } from '@/services/reportService';
@@ -9,7 +8,6 @@ import { toast } from 'sonner';
 
 export default function MessagesMonitoring() {
   const { adminProfile } = useAdminAuth();
-  const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('pending');

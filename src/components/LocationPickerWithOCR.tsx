@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { FloorPlanMap } from './FloorPlanMap';
 import { floorPlans, FloorPlan } from '@/lib/floorPlans';
 import { extractRoomNumber } from '@/lib/ocrService';
@@ -16,7 +16,7 @@ interface LocationPickerProps {
     x: number;
     y: number;
     roomNumber?: string;
-  };
+  } | null;
   onChange: (location: {
     floorPlanId: string;
     x: number;

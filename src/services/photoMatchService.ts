@@ -55,7 +55,7 @@ const PHOTO_MATCH_COLLECTION = 'photoMatches';
 
 export const photoMatchService = {
   // Upload image to Cloudinary
-  async uploadImage(file: File, userId: string): Promise<string> {
+  async uploadImage(file: File): Promise<string> {
     try {
       console.log('[PhotoMatch] Uploading to Cloudinary...');
       const imageUrl = await storageService.uploadToCloudinary(file);
@@ -182,7 +182,7 @@ export const photoMatchService = {
   },
 
   // Delete match request
-  async deleteMatchRequest(requestId: string) {
+  async deleteMatchRequest(requestId: string): Promise<void> {
     try {
       const docRef = doc(db, PHOTO_MATCH_COLLECTION, requestId);
       await deleteDoc(docRef);
@@ -268,7 +268,8 @@ export const photoMatchService = {
         currentStep: 'Finding best matches...',
       });
       
-      const matches = findMatches(queryFeatures, itemsWithFeatures, 60); // Lower threshold to 60
+      const validItems = itemsWithFeatures.filter((item): item is (Item & { features: number[]; id: string }) => !!item.id);
+      const matches = findMatches(queryFeatures, validItems, 60); // Lower threshold to 60
 
       // Convert to MatchResult format
       const results: MatchResult[] = matches.slice(0, 10).map(match => ({
@@ -347,20 +348,6 @@ export const photoMatchService = {
         status: 'failed',
         error: error instanceof Error ? error.message : 'Unknown error occurred',
       });
-    }
-  },
-
-  // Delete match request from Firestore
-  async deleteMatchRequest(requestId?: string): Promise<void> {
-    if (!requestId) return;
-    
-    try {
-      const docRef = doc(db, PHOTO_MATCH_COLLECTION, requestId);
-      await deleteDoc(docRef);
-      console.log('[PhotoMatch] Deleted request from Firestore:', requestId);
-    } catch (error) {
-      console.error('[PhotoMatch] Failed to delete request:', error);
-      throw error;
     }
   },
 };

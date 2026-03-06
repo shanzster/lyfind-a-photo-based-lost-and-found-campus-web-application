@@ -50,8 +50,8 @@ export default function RegisterPage() {
   const passwordStrength = getPasswordStrength(formData.password)
 
   // Check if email is valid LSB email
-  const isValidEmail = formData.email === '' || formData.email.toLowerCase().endsWith('@lsb.edu.ph')
-  const showEmailError = formData.email !== '' && !isValidEmail
+  // const isValidEmail = formData.email === '' || formData.email.toLowerCase().endsWith('@lsb.edu.ph')
+  // const showEmailError = formData.email !== '' && !isValidEmail
 
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -466,7 +466,7 @@ export default function RegisterPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading || isSendingOTP || (formData.email && !formData.email.toLowerCase().endsWith('@lsb.edu.ph'))}
+              disabled={isLoading || isSendingOTP || (!!formData.email && !formData.email.toLowerCase().endsWith('@lsb.edu.ph'))}
               className="w-full py-3 bg-[#ff7400] hover:bg-[#ff8500] text-white font-medium rounded-xl transition-all shadow-lg shadow-[#ff7400]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSendingOTP ? (

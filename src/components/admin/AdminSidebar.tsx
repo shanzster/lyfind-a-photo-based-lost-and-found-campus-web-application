@@ -10,7 +10,6 @@ import {
   Settings,
   FileText,
   LogOut,
-  Shield,
   Sparkles
 } from 'lucide-react';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
@@ -101,7 +100,11 @@ export default function AdminSidebar() {
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#ff7400] to-[#ff5500] flex items-center justify-center">
-              <Shield className="w-6 h-6 text-white" />
+              <img 
+                src="/Untitled design (3).png" 
+                alt="LyFind" 
+                className="w-6 h-6 object-contain"
+              />
             </div>
             <div>
               <h1 className="text-lg font-bold text-white">Admin Portal</h1>
@@ -118,7 +121,11 @@ export default function AdminSidebar() {
           <div className="p-6 border-b border-white/10">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#ff7400] to-[#ff5500] flex items-center justify-center shadow-lg shadow-[#ff7400]/30">
-                <Shield className="w-7 h-7 text-white" />
+                <img 
+                  src="/Untitled design (3).png" 
+                  alt="LyFind" 
+                  className="w-7 h-7 object-contain"
+                />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-white">Admin Portal</h1>

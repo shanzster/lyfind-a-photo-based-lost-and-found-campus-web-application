@@ -92,13 +92,11 @@ export async function extractRoomNumber(
           console.log(`[OCR] Progress: ${(m.progress * 100).toFixed(0)}%`);
         }
       },
-      // Tesseract config for better text detection
-      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
     });
 
     // Extract text and filter for room numbers or location names
     const text = result.data.text.trim();
-    const words = result.data.words || [];
+    const words = (result.data as any).words || [];
 
     console.log('[OCR] Extracted text:', text);
     console.log('[OCR] Words found:', words.length, 'words');
@@ -185,7 +183,7 @@ export async function extractAllRoomNumbers(imageUrl: string): Promise<
     // Extract room numbers from OCR results
     const roomNumberPattern = /\b([A-Z]?-?\d{2,4}[A-Z]?)\b/i;
 
-    result.data.words.forEach((word) => {
+    (result.data as any).words.forEach((word: any) => {
       const match = word.text.match(roomNumberPattern);
       if (match && word.confidence > 60) {
         // Convert pixel coordinates to percentages

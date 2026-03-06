@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell, MessageCircle, Sparkles, CheckCircle, Flag, Package, Trash2, CheckCheck, Filter } from 'lucide-react';
+import { Bell, MessageCircle, Sparkles, CheckCircle, Flag, Package, Trash2, CheckCheck } from 'lucide-react';
 import LyceanSidebar from '@/components/lycean-sidebar';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { Notification, NotificationType } from '@/services/notificationService';
+import { NotificationType } from '@/services/notificationService';
 import { toast } from 'sonner';
 
 const getNotificationIcon = (type: string) => {

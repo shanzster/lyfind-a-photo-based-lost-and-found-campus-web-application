@@ -4,7 +4,7 @@ import { Upload, X, MapPin, Calendar, Tag, FileText, Image as ImageIcon, AlertCi
 import LyceanSidebar from '@/components/lycean-sidebar'
 import { itemService } from '@/services/itemService'
 import { storageService } from '@/services/storageService'
-import { userService } from '@/services/userService'
+// import { userService } from '@/services/userService'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
 import { LocationPickerWithOCR } from '@/components/LocationPickerWithOCR'
@@ -13,7 +13,7 @@ import { autoMatchNewItem } from '@/services/autoMatchService'
 const categories = ['Bags', 'Electronics', 'Jewelry', 'Accessories', 'Keys', 'Clothing', 'Books', 'Other']
 
 export default function PostPage() {
-  const { user, userProfile, loading } = useAuth()
+  const { user, userProfile } = useAuth()
   const navigate = useNavigate()
   const [itemType, setItemType] = useState<'lost' | 'found'>('lost')
   const [title, setTitle] = useState('')
@@ -121,13 +121,18 @@ export default function PostPage() {
       // Upload photos to Cloudinary
       console.log('[Post] Uploading', imageFiles.length, 'photos to Cloudinary...')
       toast.info('Uploading photos...')
-      const photoUrls = await storageService.uploadItemPhotos(imageFiles, user.uid)
+      const photoUrls = await storageService.uploadItemPhotos(imageFiles)
       console.log('[Post] Photos uploaded successfully:', photoUrls)
       
       // Create item in Firestore
       console.log('[Post] Creating item in Firestore...')
-      console.log('[Post] User photo URL:', userProfile.photoURL || user.photoURL)
+      console.log('[Post] User photo URL:', userProfile?.photoURL || user.photoURL)
       toast.info('Creating item post...')
+      
+      if (!floorPlanLocation) {
+        toast.error('Please select a location on the floor plan');
+        return;
+      }
       
       const itemData: any = {
         type: itemType,
@@ -405,7 +410,7 @@ export default function PostPage() {
                 
                 <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl lg:rounded-2xl p-4 lg:p-6">
                   <LocationPickerWithOCR
-                    value={floorPlanLocation}
+                    value={floorPlanLocation || undefined}
                     onChange={setFloorPlanLocation}
                   />
                 </div>

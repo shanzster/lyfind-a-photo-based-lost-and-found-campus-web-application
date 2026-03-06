@@ -2,7 +2,6 @@ import {
   collection,
   addDoc,
   getDocs,
-  getDoc,
   doc,
   updateDoc,
   deleteDoc,
@@ -28,7 +27,6 @@ function showBrowserNotification(title: string, message: string, actionUrl?: str
         badge: '/Untitled design (3).png',
         tag: Date.now().toString(),
         requireInteraction: false,
-        vibrate: [200, 100, 200],
       });
 
       notification.onclick = () => {
@@ -65,6 +63,49 @@ export interface Notification {
 
 const NOTIFICATIONS_COLLECTION = 'notifications';
 
+// Backend notification server configuration
+const NOTIFICATION_SERVER_URL = import.meta.env.VITE_NOTIFICATION_SERVER_URL || 'http://localhost:3001';
+const API_SECRET = import.meta.env.VITE_NOTIFICATION_API_SECRET || '';
+
+// Helper function to send push via backend
+async function sendPushViaBackend(userId: string, notification: {
+  title: string;
+  message: string;
+  actionUrl?: string;
+  type?: string;
+  notificationId?: string;
+}) {
+  try {
+    const response = await fetch(`${NOTIFICATION_SERVER_URL}/api/send-notification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Secret': API_SECRET,
+      },
+      body: JSON.stringify({
+        userId,
+        title: notification.title,
+        message: notification.message,
+        actionUrl: notification.actionUrl,
+        type: notification.type,
+        notificationId: notification.notificationId,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('[NotificationService] Push notification sent via backend:', result);
+    return result;
+  } catch (error) {
+    console.error('[NotificationService] Failed to send push via backend:', error);
+    // Don't throw - notification is still saved in Firestore
+    return { success: false, error };
+  }
+}
+
 export const notificationService = {
   // Create a new notification
   async createNotification(
@@ -85,6 +126,15 @@ export const notificationService = {
         notificationData.message,
         notificationData.actionUrl
       );
+      
+      // Send push notification via backend server
+      await sendPushViaBackend(notificationData.userId, {
+        title: notificationData.title,
+        message: notificationData.message,
+        actionUrl: notificationData.actionUrl,
+        type: notificationData.type,
+        notificationId: docRef.id,
+      });
       
       return docRef.id;
     } catch (error) {

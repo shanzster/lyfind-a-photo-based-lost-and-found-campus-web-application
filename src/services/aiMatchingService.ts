@@ -77,8 +77,8 @@ export const aiMatchingService = {
       } as AIMatchResult));
 
       // Filter by score if specified
-      if (filters?.minScore) {
-        matches = matches.filter(m => m.similarityScore >= filters.minScore);
+      if (filters?.minScore !== undefined) {
+        matches = matches.filter(m => m.similarityScore >= filters.minScore!);
       }
 
       return matches;

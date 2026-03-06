@@ -43,8 +43,23 @@ export const userService = {
     // Check if user already exists
     const userSnap = await getDoc(userRef);
     if (userSnap.exists()) {
-      // Update last login
-      await this.updateLastLogin(firebaseUser.uid);
+      // Update last login and photoURL (in case it changed)
+      const updates: any = {
+        lastLoginAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
+      
+      // Update photoURL if it exists and is different
+      if (firebaseUser.photoURL) {
+        updates.photoURL = firebaseUser.photoURL;
+      }
+      
+      // Update displayName if provided and different
+      if (additionalData?.displayName && additionalData.displayName !== userSnap.data().displayName) {
+        updates.displayName = additionalData.displayName;
+      }
+      
+      await updateDoc(userRef, updates);
       return;
     }
 

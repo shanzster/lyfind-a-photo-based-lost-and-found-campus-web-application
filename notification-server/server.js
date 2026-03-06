@@ -21,13 +21,19 @@ const __dirname = dirname(__filename);
 
 // Initialize Firebase Admin
 try {
-  // Try to use service account JSON file first
   let credential;
   
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+    // Decode base64 service account
+    const serviceAccountJson = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8');
+    const serviceAccount = JSON.parse(serviceAccountJson);
+    credential = admin.credential.cert(serviceAccount);
+    console.log('✅ Using base64 encoded service account');
+  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     // Use JSON string from environment variable
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
     credential = admin.credential.cert(serviceAccount);
+    console.log('✅ Using JSON service account');
   } else if (process.env.FIREBASE_PRIVATE_KEY) {
     // Use individual environment variables
     credential = admin.credential.cert({
@@ -35,14 +41,16 @@ try {
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
     });
+    console.log('✅ Using individual environment variables');
   } else {
-    throw new Error('No Firebase credentials found');
+    throw new Error('No Firebase credentials found. Please set FIREBASE_SERVICE_ACCOUNT_BASE64 or FIREBASE_SERVICE_ACCOUNT_JSON');
   }
 
   admin.initializeApp({ credential });
-  console.log('🔥 Firebase Admin initialized');
+  console.log('🔥 Firebase Admin initialized successfully');
 } catch (error) {
-  console.error('❌ Failed to initialize Firebase Admin:', error);
+  console.error('❌ Failed to initialize Firebase Admin:', error.message);
+  console.error('Available env vars:', Object.keys(process.env).filter(k => k.startsWith('FIREBASE')));
   process.exit(1);
 }
 

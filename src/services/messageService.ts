@@ -10,7 +10,6 @@ import {
   doc,
   updateDoc,
   getDoc,
-  setDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { notificationService } from './notificationService';
@@ -22,6 +21,13 @@ export interface Message {
   senderName: string;
   senderPhoto?: string;
   content: string;
+  images?: string[]; // Array of image URLs
+  location?: {
+    floorPlanId: string;
+    x: number;
+    y: number;
+    roomNumber?: string;
+  };
   read: boolean;
   createdAt: Timestamp;
 }
@@ -163,7 +169,9 @@ export const messageService = {
     senderId: string,
     senderName: string,
     content: string,
-    senderPhoto?: string
+    senderPhoto?: string,
+    images?: string[],
+    location?: { floorPlanId: string; x: number; y: number; roomNumber?: string }
   ): Promise<void> {
     // Add message - only include senderPhoto if it exists
     const messageData: any = {
@@ -178,6 +186,16 @@ export const messageService = {
     // Only add senderPhoto if it has a value
     if (senderPhoto) {
       messageData.senderPhoto = senderPhoto;
+    }
+
+    // Only add images if they exist
+    if (images && images.length > 0) {
+      messageData.images = images;
+    }
+
+    // Only add location if it exists
+    if (location) {
+      messageData.location = location;
     }
 
     await addDoc(collection(db, MESSAGES_COLLECTION), messageData);
@@ -292,5 +310,33 @@ export const messageService = {
       (total, conv) => total + (conv.unreadCount[userId] || 0),
       0
     );
+  },
+
+  // Mark item as claimed
+  async markItemAsClaimed(
+    conversationId: string,
+    itemId: string,
+    claimedBy: string,
+    meetupLocation: { name: string; coordinates?: { lat: number; lng: number } }
+  ): Promise<void> {
+    // Update item status
+    const itemRef = doc(db, 'items', itemId);
+    await updateDoc(itemRef, {
+      status: 'resolved',
+      claimedBy,
+      claimedAt: Timestamp.now(),
+      meetupLocation,
+      updatedAt: Timestamp.now(),
+    });
+
+    // Send system message to conversation
+    await addDoc(collection(db, MESSAGES_COLLECTION), {
+      conversationId,
+      senderId: 'system',
+      senderName: 'System',
+      content: `Item marked as claimed! Meetup location: ${meetupLocation.name}`,
+      read: false,
+      createdAt: Timestamp.now(),
+    });
   },
 };

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, Loader2, Shield } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Loader2, AlertTriangle } from 'lucide-react';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { toast } from 'sonner';
 
@@ -48,10 +48,14 @@ export default function AdminLoginPage() {
               <div className="w-32 h-32 bg-gradient-to-br from-[#ff7400]/30 via-[#ff7400]/20 to-transparent rounded-full blur-2xl animate-pulse"></div>
             </div>
             
-            {/* Shield icon for admin */}
+            {/* LyFind logo for admin */}
             <div className="relative">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#ff7400] to-[#ff5500] flex items-center justify-center shadow-2xl shadow-[#ff7400]/50">
-                <Shield className="w-10 h-10 text-white" />
+                <img 
+                  src="/Untitled design (3).png" 
+                  alt="LyFind" 
+                  className="w-12 h-12 object-contain"
+                />
               </div>
             </div>
           </div>
@@ -108,7 +112,7 @@ export default function AdminLoginPage() {
             {/* Security Notice */}
             <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
               <div className="flex items-start gap-3">
-                <Shield className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm text-yellow-200 font-medium mb-1">Secure Access</p>
                   <p className="text-xs text-yellow-200/70">
@@ -130,10 +134,7 @@ export default function AdminLoginPage() {
                   Authenticating...
                 </>
               ) : (
-                <>
-                  <Shield className="w-5 h-5" />
-                  Sign In as Admin
-                </>
+                'Sign In as Admin'
               )}
             </button>
           </form>

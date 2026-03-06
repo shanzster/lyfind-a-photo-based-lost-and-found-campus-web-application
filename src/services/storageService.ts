@@ -1,6 +1,6 @@
 // Cloudinary configuration
-const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+const CLOUDINARY_CLOUD_NAME = import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME || '';
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env?.VITE_CLOUDINARY_UPLOAD_PRESET || '';
 
 export const storageService = {
   // Upload image to Cloudinary
@@ -36,7 +36,7 @@ export const storageService = {
   },
 
   // Upload multiple images to Cloudinary
-  async uploadItemPhotos(files: File[], userId: string): Promise<string[]> {
+  async uploadItemPhotos(files: File[]): Promise<string[]> {
     try {
       // Compress images before upload
       const compressedFiles = await Promise.all(

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, XCircle, Eye, Archive, Trash2, Clock, User, FileText } from 'lucide-react';
+import { CheckCircle, XCircle, Eye, Clock, FileText, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
@@ -55,14 +55,48 @@ export default function ReportsManagement() {
       );
 
       // If action is to archive, archive the item
-      if (reviewAction === 'archived') {
+      if (reviewAction === 'archived' && selectedReport.itemId) {
         await reportService.archiveItem(selectedReport.itemId, reviewNote);
         toast.success('Item archived successfully');
-      } else if (reviewAction === 'deleted') {
+      } else if (reviewAction === 'deleted' && selectedReport.itemId) {
         await adminService.deleteItem(selectedReport.itemId, adminProfile.uid, reviewNote);
         toast.success('Item deleted successfully');
       } else {
         toast.success('Report reviewed - no action taken');
+      }
+
+      // Get all users who reported this item and notify them
+      if (selectedReport.itemId) {
+        const reporters = await reportService.getItemReporters(selectedReport.itemId);
+        console.log('[ReportsManagement] Notifying reporters:', reporters);
+        
+        // Import notification service dynamically
+        const { notificationService } = await import('@/services/notificationService');
+        
+        // Notify each reporter
+        for (const reporter of reporters) {
+          try {
+            await notificationService.createNotification({
+              userId: reporter.userId,
+              type: 'report',
+              title: 'Report Resolved',
+              message: `Your report about "${selectedReport.itemTitle}" has been reviewed. Action taken: ${
+                reviewAction === 'archived' ? 'Item archived' :
+                reviewAction === 'deleted' ? 'Item deleted' :
+                'No action needed'
+              }`,
+              actionUrl: `/browse`,
+              metadata: {
+                itemId: selectedReport.itemId,
+                reportId: selectedReport.id,
+              }
+            });
+          } catch (error) {
+            console.error('[ReportsManagement] Failed to notify reporter:', reporter.userId, error);
+          }
+        }
+        
+        toast.success(`Notified ${reporters.length} reporter(s)`);
       }
 
       // Log admin action

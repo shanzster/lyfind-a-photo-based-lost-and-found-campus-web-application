@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Search, Filter, SortAsc, Eye, Edit, Trash2, Loader2, Image as ImageIcon } from 'lucide-react'
+import { ArrowLeft, Search, Eye, Archive, Loader2, Image as ImageIcon } from 'lucide-react'
 import LyceanSidebar from '@/components/lycean-sidebar'
 import { itemService, Item } from '@/services/itemService'
 import { useAuth } from '@/contexts/AuthContext'
@@ -55,6 +55,25 @@ export default function MyItemsPage() {
       toast.error('Failed to load your items')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleArchiveItem = async (itemId: string, currentStatus: string) => {
+    try {
+      if (currentStatus === 'archived') {
+        // Unarchive - set back to active
+        await itemService.updateItem(itemId, { status: 'active' })
+        toast.success('Item unarchived!')
+      } else {
+        // Archive the item
+        await itemService.updateItem(itemId, { status: 'archived' })
+        toast.success('Item archived!')
+      }
+      // Refresh the list
+      fetchMyItems()
+    } catch (error) {
+      console.error('[MyItems] Error archiving item:', error)
+      toast.error('Failed to archive item')
     }
   }
 
@@ -307,16 +326,15 @@ export default function MyItemsPage() {
                         View
                       </Link>
                       <button
-                        onClick={() => toast.info('Edit feature coming soon!')}
-                        className="px-4 py-2 backdrop-blur-xl bg-white/10 border border-white/20 text-white rounded-xl hover:bg-white/20 transition-all"
+                        onClick={() => handleArchiveItem(item.id!, item.status)}
+                        className={`px-4 py-2 backdrop-blur-xl rounded-xl hover:bg-white/20 transition-all ${
+                          item.status === 'archived'
+                            ? 'bg-green-500/20 border border-green-500/30 text-green-300'
+                            : 'bg-white/10 border border-white/20 text-white'
+                        }`}
+                        title={item.status === 'archived' ? 'Unarchive' : 'Archive'}
                       >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => toast.info('Delete feature coming soon!')}
-                        className="px-4 py-2 backdrop-blur-xl bg-red-500/20 border border-red-500/30 text-red-300 rounded-xl hover:bg-red-500/30 transition-all"
-                      >
-                        <Trash2 className="w-4 h-4" />
+                        <Archive className="w-4 h-4" />
                       </button>
                     </div>
                   </div>

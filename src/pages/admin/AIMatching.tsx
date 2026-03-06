@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, Activity, TrendingUp, Eye, Settings, RefreshCw, CheckCircle, Image as ImageIcon, Zap, BarChart3, Trash2, X, Clock } from 'lucide-react';
+import { Sparkles, RefreshCw, CheckCircle, Zap, BarChart3, Trash2, X, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { aiMatchingService, AIMatchResult } from '@/services/aiMatchingService';

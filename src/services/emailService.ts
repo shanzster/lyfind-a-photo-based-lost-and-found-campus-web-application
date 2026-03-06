@@ -2,7 +2,7 @@ import SibApiV3Sdk from 'sib-api-v3-sdk';
 
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
 const apiKey = defaultClient.authentications['api-key'];
-apiKey.apiKey = import.meta.env.VITE_BREVO_API_KEY;
+apiKey.apiKey = import.meta.env?.VITE_BREVO_API_KEY || '';
 
 const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
@@ -329,7 +329,7 @@ export const emailService = {
       `;
       sendSmtpEmail.sender = {
         name: 'LyFind',
-        email: import.meta.env.VITE_BREVO_SENDER_EMAIL
+        email: import.meta.env?.VITE_BREVO_SENDER_EMAIL || 'noreply@lyfind.com'
       };
       sendSmtpEmail.to = [{ email: normalizedEmail, name: normalizedEmail.split('@')[0] }];
 
@@ -704,7 +704,7 @@ export const emailService = {
       `;
       sendSmtpEmail.sender = {
         name: 'LyFind',
-        email: import.meta.env.VITE_BREVO_SENDER_EMAIL
+        email: import.meta.env?.VITE_BREVO_SENDER_EMAIL || 'noreply@lyfind.com'
       };
       sendSmtpEmail.to = [{ email: normalizedEmail, name: displayName }];
 

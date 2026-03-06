@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Calendar, User, Activity } from 'lucide-react';
+import { FileText, Activity } from 'lucide-react';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { adminService } from '@/services/adminService';
 
