@@ -193,12 +193,17 @@ export default function RegisterPage() {
     setIsGoogleLoading(true)
     try {
       await loginWithGoogle()
-      navigate('/browse')
+      // Don't navigate here - AuthContext will handle it after redirect
+      // For popup flow (desktop), this will navigate immediately
+      // For redirect flow (mobile/PWA), the redirect happens and AuthContext navigates after return
+      if (!(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))) {
+        // Only navigate on desktop (popup flow)
+        navigate('/browse')
+      }
     } catch (error: any) {
       console.error('Google sign-in error:', error)
-      // Error handling is done in the loginWithGoogle function
-    } finally {
       setIsGoogleLoading(false)
+      // Error handling is done in the loginWithGoogle function
     }
   }
 

@@ -62,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleRedirectResult = async () => {
       try {
+        console.log('[Auth] Checking for redirect result...');
         const result = await getRedirectResult(auth);
         
         if (result) {
@@ -70,11 +71,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           // Double-check the email domain
           if (!userService.isLSBEmail(user.email!)) {
+            console.log('[Auth] Non-LSB email detected, signing out');
             await signOut(auth);
             toast.error('Only @lsb.edu.ph accounts are allowed');
             return;
           }
 
+          console.log('[Auth] Creating/updating user profile...');
           // Create or update user profile
           await userService.createUserProfile(user, {
             displayName: user.displayName || user.email?.split('@')[0] || 'User',
@@ -83,8 +86,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Load the user profile
           const profile = await userService.getUserProfile(user.uid);
           setUserProfile(profile);
+          setUser(user);
           
+          console.log('[Auth] Sign-in successful, redirecting to /browse');
           toast.success('Logged in with Google successfully!');
+          
+          // Navigate to browse page after successful sign-in
+          window.location.href = '/browse';
+        } else {
+          console.log('[Auth] No redirect result found');
         }
       } catch (error: any) {
         console.error('[Auth] Redirect result error:', error);
