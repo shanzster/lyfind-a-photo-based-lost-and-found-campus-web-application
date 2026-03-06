@@ -76,6 +76,11 @@ async function sendPushViaBackend(userId: string, notification: {
   notificationId?: string;
 }) {
   try {
+    console.log('[NotificationService] Sending push notification to backend...');
+    console.log('[NotificationService] Server URL:', NOTIFICATION_SERVER_URL);
+    console.log('[NotificationService] User ID:', userId);
+    console.log('[NotificationService] Notification:', notification);
+    
     const response = await fetch(`${NOTIFICATION_SERVER_URL}/api/send-notification`, {
       method: 'POST',
       headers: {
@@ -92,8 +97,12 @@ async function sendPushViaBackend(userId: string, notification: {
       }),
     });
 
+    console.log('[NotificationService] Backend response status:', response.status);
+
     if (!response.ok) {
-      throw new Error(`Backend returned ${response.status}`);
+      const errorText = await response.text();
+      console.error('[NotificationService] Backend error response:', errorText);
+      throw new Error(`Backend returned ${response.status}: ${errorText}`);
     }
 
     const result = await response.json();
