@@ -143,21 +143,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     try {
-      // Check if running in PWA standalone mode
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-                          (window.navigator as any).standalone === true;
+      // Enhanced PWA detection for Android and iOS
+      const isStandalone = 
+        // Standard PWA detection
+        window.matchMedia('(display-mode: standalone)').matches ||
+        // iOS Safari
+        (window.navigator as any).standalone === true ||
+        // Android Chrome - check if opened from home screen
+        document.referrer.includes('android-app://') ||
+        // Check if running in TWA (Trusted Web Activity)
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        // Additional check for mobile PWA
+        (window.matchMedia('(display-mode: standalone)').matches && 
+         /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+
+      // Force redirect on mobile devices regardless of detection
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const shouldUseRedirect = isStandalone || isMobile;
 
       let result;
       
-      if (isStandalone) {
-        // Use redirect for PWA (popups don't work in standalone mode)
-        console.log('[Auth] PWA detected, using redirect flow');
+      if (shouldUseRedirect) {
+        // Use redirect for PWA and mobile (popups don't work reliably)
+        console.log('[Auth] PWA/Mobile detected, using redirect flow');
+        console.log('[Auth] isStandalone:', isStandalone);
+        console.log('[Auth] isMobile:', isMobile);
         await signInWithRedirect(auth, provider);
         // The redirect will happen, and we'll handle the result in useEffect
         return;
       } else {
-        // Use popup for web browsers
-        console.log('[Auth] Browser detected, using popup flow');
+        // Use popup for desktop browsers only
+        console.log('[Auth] Desktop browser detected, using popup flow');
         result = await signInWithPopup(auth, provider);
       }
 
