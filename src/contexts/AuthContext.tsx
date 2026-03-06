@@ -62,12 +62,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleRedirectResult = async () => {
       try {
-        console.log('[Auth] Checking for redirect result...');
+        // Check if we're expecting a redirect result
+        let isPending = false;
+        try {
+          isPending = sessionStorage.getItem('pendingGoogleSignIn') === 'true' ||
+                     localStorage.getItem('pendingGoogleSignIn') === 'true';
+        } catch (e) {
+          console.warn('[Auth] Could not access storage');
+        }
+
+        console.log('[Auth] Checking for redirect result... isPending:', isPending);
+        
         const result = await getRedirectResult(auth);
         
         if (result) {
           const user = result.user;
           console.log('[Auth] Redirect result received:', user.email);
+
+          // Clear the pending flag
+          try {
+            sessionStorage.removeItem('pendingGoogleSignIn');
+            localStorage.removeItem('pendingGoogleSignIn');
+          } catch (e) {
+            console.warn('[Auth] Could not clear storage flags');
+          }
 
           // Double-check the email domain
           if (!userService.isLSBEmail(user.email!)) {
@@ -92,16 +110,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           toast.success('Logged in with Google successfully!');
           
           // Navigate to browse page after successful sign-in
-          window.location.href = '/browse';
+          setTimeout(() => {
+            window.location.href = '/browse';
+          }, 500);
         } else {
           console.log('[Auth] No redirect result found');
+          // Clear any stale pending flags
+          if (isPending) {
+            try {
+              sessionStorage.removeItem('pendingGoogleSignIn');
+              localStorage.removeItem('pendingGoogleSignIn');
+            } catch (e) {
+              // Ignore
+            }
+          }
         }
       } catch (error: any) {
         console.error('[Auth] Redirect result error:', error);
-        if (error.message?.includes('lsb.edu.ph')) {
+        console.error('[Auth] Error code:', error.code);
+        console.error('[Auth] Error message:', error.message);
+        
+        // Clear pending flags on error
+        try {
+          sessionStorage.removeItem('pendingGoogleSignIn');
+          localStorage.removeItem('pendingGoogleSignIn');
+        } catch (e) {
+          // Ignore
+        }
+        
+        if (error.code === 'auth/invalid-api-key' || error.code === 'auth/network-request-failed') {
+          toast.error('Network error. Please check your connection and try again.');
+        } else if (error.message?.includes('lsb.edu.ph')) {
           toast.error('Only @lsb.edu.ph accounts are allowed');
-        } else if (error.code !== 'auth/popup-closed-by-user') {
-          toast.error('Failed to sign in with Google');
+        } else if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+          toast.error('Failed to sign in with Google. Please try again.');
         }
       }
     };
@@ -167,17 +209,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (window.matchMedia('(display-mode: standalone)').matches && 
          /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
 
-      // Force redirect on mobile devices regardless of detection
+      // Check if mobile device
       const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      const shouldUseRedirect = isStandalone || isMobile;
 
       let result;
       
-      if (shouldUseRedirect) {
-        // Use redirect for PWA and mobile (popups don't work reliably)
-        console.log('[Auth] PWA/Mobile detected, using redirect flow');
+      // Always use redirect for mobile (more reliable than popup)
+      if (isMobile) {
+        console.log('[Auth] Mobile detected, using redirect flow');
         console.log('[Auth] isStandalone:', isStandalone);
-        console.log('[Auth] isMobile:', isMobile);
+        console.log('[Auth] User agent:', navigator.userAgent);
+        
+        // Store a flag to know we're expecting a redirect result
+        try {
+          sessionStorage.setItem('pendingGoogleSignIn', 'true');
+          console.log('[Auth] Set pendingGoogleSignIn flag');
+        } catch (e) {
+          console.warn('[Auth] Could not set sessionStorage, using localStorage');
+          localStorage.setItem('pendingGoogleSignIn', 'true');
+        }
+        
         await signInWithRedirect(auth, provider);
         // The redirect will happen, and we'll handle the result in useEffect
         return;

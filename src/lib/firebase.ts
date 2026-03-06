@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence, indexedDBLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAnalytics } from 'firebase/analytics';
@@ -20,10 +20,20 @@ const app = initializeApp(firebaseConfig);
 // Initialize services
 export const auth = getAuth(app);
 
-// Set auth persistence to LOCAL (keeps user logged in across browser sessions)
-setPersistence(auth, browserLocalPersistence).catch((error) => {
-  console.error('Error setting auth persistence:', error);
-});
+// Set auth persistence - use IndexedDB for better PWA support
+// IndexedDB works better than localStorage in PWA standalone mode
+setPersistence(auth, indexedDBLocalPersistence)
+  .then(() => {
+    console.log('[Firebase] Auth persistence set to IndexedDB');
+  })
+  .catch((error) => {
+    console.error('[Firebase] Error setting IndexedDB persistence, falling back to localStorage:', error);
+    // Fallback to localStorage if IndexedDB fails
+    return setPersistence(auth, browserLocalPersistence);
+  })
+  .catch((error) => {
+    console.error('[Firebase] Error setting auth persistence:', error);
+  });
 
 export const db = getFirestore(app);
 export const storage = getStorage(app);
